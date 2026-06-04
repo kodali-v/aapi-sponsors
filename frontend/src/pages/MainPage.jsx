@@ -250,12 +250,95 @@ function ScheduleTab({ sponsors, schedule, setSchedule }) {
   );
 }
 
+// ── Notes helpers ─────────────────────────────────────────
+const isNotesCol = d => (d?.name || '').trim().toLowerCase() === 'notes';
+
+// Notes content can be legacy ([] / array of strings) or the new { text, bullets } shape
+function normalizeNotes(raw) {
+  if (Array.isArray(raw)) return { text: '', bullets: raw };
+  if (raw && typeof raw === 'object') return { text: raw.text || '', bullets: Array.isArray(raw.bullets) ? raw.bullets : [] };
+  return { text: '', bullets: [] };
+}
+
+// Paragraph + bullet-point notes cell (the pinned last column)
+function NotesCell({ value, onSave }) {
+  const norm = normalizeNotes(value);
+  const [text, setText] = useState(norm.text);
+  const [bullets, setBullets] = useState(norm.bullets);
+
+  const persist = (t, b) => onSave({ text: t, bullets: b.map(x => x).filter(x => x.trim() !== '') });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220 }}>
+      <textarea
+        className="note-input"
+        style={{ width: '100%', minHeight: 54, resize: 'vertical', fontFamily: 'inherit', padding: '6px 8px' }}
+        placeholder="Add notes…"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onBlur={() => persist(text, bullets)}
+      />
+      {bullets.length > 0 && (
+        <ul className="notes-list" style={{ margin: 0, paddingLeft: 18 }}>
+          {bullets.map((b, i) => (
+            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input
+                className="note-input"
+                style={{ flex: 1, border: 'none', borderBottom: '1px solid #e2e8f0', padding: '2px 2px', fontSize: 12 }}
+                value={b}
+                placeholder="Bullet…"
+                autoFocus={b === ''}
+                onChange={e => { const nb = [...bullets]; nb[i] = e.target.value; setBullets(nb); }}
+                onBlur={() => persist(text, bullets)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); const nb = [...bullets]; nb.splice(i + 1, 0, ''); setBullets(nb); }
+                  if (e.key === 'Backspace' && b === '') { e.preventDefault(); const nb = bullets.filter((_, j) => j !== i); setBullets(nb); persist(text, nb); }
+                }}
+              />
+              <span style={{ cursor: 'pointer', color: '#dc2626', fontSize: 11, flexShrink: 0 }}
+                onClick={() => { const nb = bullets.filter((_, j) => j !== i); setBullets(nb); persist(text, nb); }}>✕</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '1px 6px', alignSelf: 'flex-start' }}
+        onClick={() => setBullets([...bullets, ''])}>+ bullet</button>
+    </div>
+  );
+}
+
 // ── Deliverables Tab ──────────────────────────────────────
 function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setMatrix }) {
   const [addingCol, setAddingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [editingNote, setEditingNote] = useState(null); // { sponsorId, deliverableId }
   const [noteInput, setNoteInput] = useState('');
+  const [dragColId, setDragColId] = useState(null);
+  const [overColId, setOverColId] = useState(null);
+
+  // Notes is always the last, non-draggable column
+  const notesCol = deliverables.find(isNotesCol);
+  const cols = deliverables.filter(d => !isNotesCol(d));
+  const orderedDeliverables = notesCol ? [...cols, notesCol] : cols;
+
+  const handleColDrop = async (targetId) => {
+    if (!dragColId || dragColId === targetId) { setDragColId(null); setOverColId(null); return; }
+    const reordered = [...cols];
+    const from = reordered.findIndex(c => c.id === dragColId);
+    const to = reordered.findIndex(c => c.id === targetId);
+    setDragColId(null); setOverColId(null);
+    if (from < 0 || to < 0) return;
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const next = notesCol ? [...reordered, notesCol] : reordered;
+    setDeliverables(next);
+    try { await api.put('/deliverables/columns/reorder', { order: next.map(c => c.id) }); } catch { /* keep optimistic order */ }
+  };
+
+  const handleSaveNotes = async (sponsorId, deliverableId, content) => {
+    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { checked: false, notes: content });
+    setMatrix(prev => ({ ...prev, [sponsorId]: { ...prev[sponsorId], [deliverableId]: { checked: false, notes: content } } }));
+  };
 
   const handleCheck = async (sponsorId, deliverableId, checked) => {
     const current = matrix[sponsorId]?.[deliverableId] || { checked: false, notes: [] };
@@ -324,15 +407,25 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
           <tr>
             <th style={{ minWidth: 160 }}>Company</th>
             <th style={{ minWidth: 80 }}>Status</th>
-            {deliverables.map(d => (
-              <th key={d.id} style={{ minWidth: 120 }}>
+            {cols.map(d => (
+              <th key={d.id} style={{ minWidth: 120, cursor: 'move', opacity: dragColId === d.id ? 0.4 : 1, outline: overColId === d.id ? '2px dashed rgba(255,255,255,0.7)' : 'none', outlineOffset: -2 }}
+                draggable
+                onDragStart={() => setDragColId(d.id)}
+                onDragOver={e => { e.preventDefault(); if (overColId !== d.id) setOverColId(d.id); }}
+                onDragLeave={() => { if (overColId === d.id) setOverColId(null); }}
+                onDrop={() => handleColDrop(d.id)}
+                onDragEnd={() => { setDragColId(null); setOverColId(null); }}
+                title="Drag to reorder column">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
-                  {d.name}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ opacity: 0.5, fontSize: 11, letterSpacing: -2 }}>⋮⋮</span>{d.name}
+                  </span>
                   <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 11 }}
                     onClick={() => handleDeleteCol(d.id)} title="Delete column">✕</span>
                 </div>
               </th>
             ))}
+            {notesCol && <th key={notesCol.id} style={{ minWidth: 240 }}>{notesCol.name}</th>}
           </tr>
         </thead>
         <tbody>
@@ -340,8 +433,18 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
             <tr key={sponsor.id}>
               <td className="company-cell">{sponsor.name}</td>
               <td><span className={`badge badge-${sponsor.status}`}>{sponsor.status}</span></td>
-              {deliverables.map(d => {
+              {orderedDeliverables.map(d => {
                 const cell = matrix[sponsor.id]?.[d.id] || { checked: false, notes: [] };
+                if (isNotesCol(d)) {
+                  return (
+                    <td key={d.id} style={{ verticalAlign: 'top' }}>
+                      <NotesCell
+                        value={cell.notes}
+                        onSave={content => handleSaveNotes(sponsor.id, d.id, content)}
+                      />
+                    </td>
+                  );
+                }
                 const isEditing = editingNote?.sponsorId === sponsor.id && editingNote?.deliverableId === d.id;
                 return (
                   <td key={d.id}>
