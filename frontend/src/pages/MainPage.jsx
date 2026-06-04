@@ -253,56 +253,71 @@ function ScheduleTab({ sponsors, schedule, setSchedule }) {
 // ── Notes helpers ─────────────────────────────────────────
 const isNotesCol = d => (d?.name || '').trim().toLowerCase() === 'notes';
 
-// Notes content can be legacy ([] / array of strings) or the new { text, bullets } shape
-function normalizeNotes(raw) {
-  if (Array.isArray(raw)) return { text: '', bullets: raw };
-  if (raw && typeof raw === 'object') return { text: raw.text || '', bullets: Array.isArray(raw.bullets) ? raw.bullets : [] };
-  return { text: '', bullets: [] };
+// Notes content -> a single block of paragraph text. Bullets are just lines that start with "• ".
+// Migrates legacy shapes: plain string, array of strings, or { text, bullets } from earlier builds.
+const BULLET = '• ';
+function normalizeNotesText(raw) {
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) return raw.map(x => BULLET + x).join('\n');
+  if (raw && typeof raw === 'object') {
+    const parts = [];
+    if (raw.text) parts.push(raw.text);
+    if (Array.isArray(raw.bullets)) parts.push(...raw.bullets.map(b => BULLET + b));
+    return parts.join('\n');
+  }
+  return '';
 }
 
-// Paragraph + bullet-point notes cell (the pinned last column)
+// Single notes box (pinned last column). "+ bullet" inserts a bullet line into the text itself.
 function NotesCell({ value, onSave }) {
-  const norm = normalizeNotes(value);
-  const [text, setText] = useState(norm.text);
-  const [bullets, setBullets] = useState(norm.bullets);
+  const [text, setText] = useState(normalizeNotesText(value));
+  const ref = useRef(null);
 
-  const persist = (t, b) => onSave({ text: t, bullets: b.map(x => x).filter(x => x.trim() !== '') });
+  const addBullet = () => {
+    const ta = ref.current;
+    const pos = ta ? (ta.selectionStart ?? text.length) : text.length;
+    const before = text.slice(0, pos);
+    const after = text.slice(pos);
+    const prefix = (before === '' || before.endsWith('\n')) ? BULLET : '\n' + BULLET;
+    const next = before + prefix + after;
+    setText(next);
+    const caret = before.length + prefix.length;
+    requestAnimationFrame(() => { if (ta) { ta.focus(); ta.setSelectionRange(caret, caret); } });
+  };
+
+  const handleKeyDown = e => {
+    if (e.key !== 'Enter') return;
+    const ta = ref.current;
+    const pos = ta ? ta.selectionStart : text.length;
+    const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+    const line = text.slice(lineStart, pos);
+    // Continue a bullet list when Enter is pressed on a bullet line
+    if (line.trimStart().startsWith('•')) {
+      if (line.trim() === '•') return; // empty bullet -> let Enter break out
+      e.preventDefault();
+      const before = text.slice(0, pos);
+      const after = text.slice(pos);
+      const next = before + '\n' + BULLET + after;
+      setText(next);
+      const caret = before.length + 1 + BULLET.length;
+      requestAnimationFrame(() => { if (ta) { ta.focus(); ta.setSelectionRange(caret, caret); } });
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220 }}>
       <textarea
+        ref={ref}
         className="note-input"
-        style={{ width: '100%', minHeight: 54, resize: 'vertical', fontFamily: 'inherit', padding: '6px 8px' }}
+        style={{ width: '100%', minHeight: 70, resize: 'vertical', fontFamily: 'inherit', padding: '6px 8px', lineHeight: 1.5 }}
         placeholder="Add notes…"
         value={text}
         onChange={e => setText(e.target.value)}
-        onBlur={() => persist(text, bullets)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => onSave(text)}
       />
-      {bullets.length > 0 && (
-        <ul className="notes-list" style={{ margin: 0, paddingLeft: 18 }}>
-          {bullets.map((b, i) => (
-            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input
-                className="note-input"
-                style={{ flex: 1, border: 'none', borderBottom: '1px solid #e2e8f0', padding: '2px 2px', fontSize: 12 }}
-                value={b}
-                placeholder="Bullet…"
-                autoFocus={b === ''}
-                onChange={e => { const nb = [...bullets]; nb[i] = e.target.value; setBullets(nb); }}
-                onBlur={() => persist(text, bullets)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') { e.preventDefault(); const nb = [...bullets]; nb.splice(i + 1, 0, ''); setBullets(nb); }
-                  if (e.key === 'Backspace' && b === '') { e.preventDefault(); const nb = bullets.filter((_, j) => j !== i); setBullets(nb); persist(text, nb); }
-                }}
-              />
-              <span style={{ cursor: 'pointer', color: '#dc2626', fontSize: 11, flexShrink: 0 }}
-                onClick={() => { const nb = bullets.filter((_, j) => j !== i); setBullets(nb); persist(text, nb); }}>✕</span>
-            </li>
-          ))}
-        </ul>
-      )}
       <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '1px 6px', alignSelf: 'flex-start' }}
-        onClick={() => setBullets([...bullets, ''])}>+ bullet</button>
+        onClick={addBullet}>+ bullet</button>
     </div>
   );
 }
