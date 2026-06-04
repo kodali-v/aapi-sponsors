@@ -71,15 +71,53 @@ const initDB = async () => {
         UNIQUE(sponsor_id, deliverable_id)
       );
 
-      -- Seed default days
-      INSERT INTO days (name, sort_order) VALUES
-        ('Friday', 0), ('Saturday', 1)
-      ON CONFLICT DO NOTHING;
+      -- Tabs (each tab is a 'schedule' board or a 'deliverables' table)
+      CREATE TABLE IF NOT EXISTS tabs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(255) NOT NULL,
+        type VARCHAR(20) NOT NULL DEFAULT 'schedule',
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
 
-      -- Seed default deliverables
-      INSERT INTO deliverables (name, sort_order) VALUES
-        ('Booth', 0), ('Product Theatre', 1), ('Ad', 2), ('Notes', 3)
-      ON CONFLICT DO NOTHING;
+      -- Scope days and deliverable columns to their owning tab
+      ALTER TABLE days ADD COLUMN IF NOT EXISTS tab_id UUID REFERENCES tabs(id) ON DELETE CASCADE;
+      ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS tab_id UUID REFERENCES tabs(id) ON DELETE CASCADE;
+
+      -- Idempotent migration + safe default seeding (no duplicates on restart)
+      DO $$
+      DECLARE
+        sched_tab UUID;
+        deliv_tab UUID;
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM tabs) THEN
+          INSERT INTO tabs (name, type, sort_order) VALUES ('Product Theatre', 'schedule', 0) RETURNING id INTO sched_tab;
+          INSERT INTO tabs (name, type, sort_order) VALUES ('Deliverables', 'deliverables', 1) RETURNING id INTO deliv_tab;
+        ELSE
+          SELECT id INTO sched_tab FROM tabs WHERE type = 'schedule' ORDER BY sort_order LIMIT 1;
+          SELECT id INTO deliv_tab FROM tabs WHERE type = 'deliverables' ORDER BY sort_order LIMIT 1;
+        END IF;
+
+        -- Backfill any pre-existing rows that have no tab yet
+        IF sched_tab IS NOT NULL THEN
+          UPDATE days SET tab_id = sched_tab WHERE tab_id IS NULL;
+        END IF;
+        IF deliv_tab IS NOT NULL THEN
+          UPDATE deliverables SET tab_id = deliv_tab WHERE tab_id IS NULL;
+        END IF;
+
+        -- Seed default days only if the schedule tab has none
+        IF sched_tab IS NOT NULL AND NOT EXISTS (SELECT 1 FROM days WHERE tab_id = sched_tab) THEN
+          INSERT INTO days (name, tab_id, sort_order) VALUES
+            ('Friday', sched_tab, 0), ('Saturday', sched_tab, 1);
+        END IF;
+
+        -- Seed default deliverable columns only if the deliverables tab has none
+        IF deliv_tab IS NOT NULL AND NOT EXISTS (SELECT 1 FROM deliverables WHERE tab_id = deliv_tab) THEN
+          INSERT INTO deliverables (name, tab_id, sort_order) VALUES
+            ('Booth', deliv_tab, 0), ('Product Theatre', deliv_tab, 1), ('Ad', deliv_tab, 2), ('Notes', deliv_tab, 3);
+        END IF;
+      END $$;
     `);
     console.log('DB initialized');
   } finally {

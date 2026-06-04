@@ -11,7 +11,10 @@ const auth = (req, res, next) => {
 
 // Get all deliverables + all sponsor_deliverables
 router.get('/', auth, async (req, res) => {
-  const deliverables = await pool.query('SELECT * FROM deliverables ORDER BY sort_order');
+  const { tab_id } = req.query;
+  const deliverables = tab_id
+    ? await pool.query('SELECT * FROM deliverables WHERE tab_id=$1 ORDER BY sort_order', [tab_id])
+    : await pool.query('SELECT * FROM deliverables ORDER BY sort_order');
   const sponsors = await pool.query('SELECT * FROM sponsors ORDER BY sort_order, created_at');
   const sd = await pool.query('SELECT * FROM sponsor_deliverables');
 
@@ -32,11 +35,11 @@ router.get('/', auth, async (req, res) => {
 
 // Add deliverable column
 router.post('/columns', auth, async (req, res) => {
-  const { name } = req.body;
-  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM deliverables');
+  const { name, tab_id } = req.body;
+  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM deliverables WHERE tab_id=$1', [tab_id || null]);
   const r = await pool.query(
-    'INSERT INTO deliverables (name, sort_order) VALUES ($1,$2) RETURNING *',
-    [name.trim(), max.rows[0].m + 1]
+    'INSERT INTO deliverables (name, tab_id, sort_order) VALUES ($1,$2,$3) RETURNING *',
+    [name.trim(), tab_id || null, max.rows[0].m + 1]
   );
   res.json(r.rows[0]);
 });

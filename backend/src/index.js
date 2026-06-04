@@ -9,6 +9,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/tabs', require('./routes/tabs'));
 app.use('/api/sponsors', require('./routes/sponsors'));
 app.use('/api/schedule', require('./routes/schedule'));
 app.use('/api/deliverables', require('./routes/deliverables'));

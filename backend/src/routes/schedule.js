@@ -11,7 +11,10 @@ const auth = (req, res, next) => {
 
 // Get full schedule (days + slots + assignments)
 router.get('/', auth, async (req, res) => {
-  const days = await pool.query('SELECT * FROM days ORDER BY sort_order');
+  const { tab_id } = req.query;
+  const days = tab_id
+    ? await pool.query('SELECT * FROM days WHERE tab_id=$1 ORDER BY sort_order', [tab_id])
+    : await pool.query('SELECT * FROM days ORDER BY sort_order');
   const slots = await pool.query('SELECT * FROM time_slots ORDER BY sort_order');
   const assignments = await pool.query(
     `SELECT sa.*, s.name as sponsor_name, s.status as sponsor_status
@@ -32,11 +35,11 @@ router.get('/', auth, async (req, res) => {
 
 // Add day
 router.post('/days', auth, async (req, res) => {
-  const { name, date } = req.body;
-  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM days');
+  const { name, date, tab_id } = req.body;
+  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM days WHERE tab_id=$1', [tab_id || null]);
   const r = await pool.query(
-    'INSERT INTO days (name, date, sort_order) VALUES ($1,$2,$3) RETURNING *',
-    [name.trim(), date || null, max.rows[0].m + 1]
+    'INSERT INTO days (name, date, tab_id, sort_order) VALUES ($1,$2,$3,$4) RETURNING *',
+    [name.trim(), date || null, tab_id || null, max.rows[0].m + 1]
   );
   res.json({ ...r.rows[0], slots: [] });
 });

@@ -92,7 +92,7 @@ function SponsorChip({ sponsor, onDelete, onStatusChange, onDragStart }) {
 }
 
 // ── Schedule Tab ──────────────────────────────────────────
-function ScheduleTab({ sponsors, schedule, setSchedule, onAddSponsor, onDeleteSponsor, onStatusChange }) {
+function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onDeleteSponsor, onStatusChange }) {
   const [dragSponsorId, setDragSponsorId] = useState(null);
   const [addingSlot, setAddingSlot] = useState(null); // dayId
   const [addingDay, setAddingDay] = useState(false);
@@ -139,7 +139,7 @@ function ScheduleTab({ sponsors, schedule, setSchedule, onAddSponsor, onDeleteSp
 
   const handleAddDay = async () => {
     if (!newDayName.trim()) return;
-    const r = await api.post('/schedule/days', { name: newDayName.trim() });
+    const r = await api.post('/schedule/days', { name: newDayName.trim(), tab_id: tabId });
     setSchedule(prev => [...prev, r.data]);
     setNewDayName(''); setAddingDay(false);
   };
@@ -320,7 +320,7 @@ function NotesCell({ value, onSave }) {
 }
 
 // ── Deliverables Tab ──────────────────────────────────────
-function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setMatrix }) {
+function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setMatrix, tabId }) {
   const [addingCol, setAddingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [editingNote, setEditingNote] = useState(null); // { sponsorId, deliverableId }
@@ -376,7 +376,7 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
 
   const handleAddCol = async () => {
     if (!newColName.trim()) return;
-    const r = await api.post('/deliverables/columns', { name: newColName.trim() });
+    const r = await api.post('/deliverables/columns', { name: newColName.trim(), tab_id: tabId });
     setDeliverables(prev => [...prev, r.data]);
     // Init matrix for new column
     setMatrix(prev => {
@@ -512,58 +512,198 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
   );
 }
 
+// ── Tab Bar (add / rename / delete / reorder tabs) ────────
+function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder }) {
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('schedule');
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
+  const submitAdd = () => {
+    if (!newName.trim()) return;
+    onAdd(newName.trim(), newType);
+    setNewName(''); setNewType('schedule'); setAdding(false);
+  };
+  const submitRename = (id) => {
+    if (editName.trim()) onRename(id, editName.trim());
+    setEditingId(null);
+  };
+  const drop = (targetId) => {
+    if (dragId && dragId !== targetId) {
+      const ids = tabs.map(t => t.id);
+      const from = ids.indexOf(dragId), to = ids.indexOf(targetId);
+      ids.splice(to, 0, ids.splice(from, 1)[0]);
+      onReorder(ids);
+    }
+    setDragId(null); setOverId(null);
+  };
+
+  return (
+    <div className="tabs" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+      {tabs.map(t => (
+        <div key={t.id}
+          className={`tab${t.id === activeTabId ? ' active' : ''}`}
+          draggable={editingId !== t.id}
+          onDragStart={() => setDragId(t.id)}
+          onDragOver={e => { e.preventDefault(); if (overId !== t.id) setOverId(t.id); }}
+          onDrop={() => drop(t.id)}
+          onDragEnd={() => { setDragId(null); setOverId(null); }}
+          onClick={() => { if (editingId !== t.id) onSelect(t.id); }}
+          onDoubleClick={() => { setEditingId(t.id); setEditName(t.name); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+            opacity: dragId === t.id ? 0.4 : 1,
+            borderLeft: overId === t.id ? '2px solid #1e3a5f' : '2px solid transparent' }}
+          title="Click to open · double-click to rename · drag to reorder">
+          <span style={{ opacity: 0.4, fontSize: 11, letterSpacing: -2 }}>⋮⋮</span>
+          {editingId === t.id ? (
+            <input autoFocus value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onClick={e => e.stopPropagation()}
+              onBlur={() => submitRename(t.id)}
+              onKeyDown={e => { if (e.key === 'Enter') submitRename(t.id); if (e.key === 'Escape') setEditingId(null); }}
+              style={{ font: 'inherit', width: 120, padding: '2px 4px' }} />
+          ) : (
+            <span>{t.type === 'deliverables' ? '📋' : '📅'} {t.name}</span>
+          )}
+          <span style={{ opacity: 0.4, fontSize: 12 }} title="Delete tab"
+            onClick={e => { e.stopPropagation(); if (window.confirm(`Delete tab "${t.name}" and its contents?`)) onDelete(t.id); }}>✕</span>
+        </div>
+      ))}
+
+      {adding ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px' }}>
+          <input autoFocus className="form-input" placeholder="Tab name" value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') submitAdd(); if (e.key === 'Escape') setAdding(false); }}
+            style={{ width: 130 }} />
+          <select value={newType} onChange={e => setNewType(e.target.value)}
+            style={{ padding: '7px 8px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }}>
+            <option value="schedule">📅 Schedule board</option>
+            <option value="deliverables">📋 Deliverables table</option>
+          </select>
+          <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
+        </div>
+      ) : (
+        <div className="tab" style={{ cursor: 'pointer', opacity: 0.75 }} onClick={() => setAdding(true)}>+ Add Tab</div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────
 export default function MainPage() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('schedule');
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
   const [sponsors, setSponsors] = useState([]);
-  const [schedule, setSchedule] = useState([]);
-  const [deliverables, setDeliverables] = useState([]);
-  const [matrix, setMatrix] = useState({});
+  const [scheduleByTab, setScheduleByTab] = useState({}); // tabId -> days[]
+  const [delivByTab, setDelivByTab] = useState({});       // tabId -> { deliverables, matrix }
   const [loading, setLoading] = useState(true);
 
+  // Initial load: tabs + sponsors (tab contents load lazily)
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
-    Promise.all([
-      api.get('/sponsors'),
-      api.get('/schedule'),
-      api.get('/deliverables'),
-    ]).then(([sp, sc, dl]) => {
-      setSponsors(sp.data);
-      setSchedule(sc.data);
-      setDeliverables(dl.data.deliverables);
-      setMatrix(dl.data.matrix);
-    }).catch(console.error)
+    Promise.all([api.get('/tabs'), api.get('/sponsors')])
+      .then(([t, sp]) => {
+        setTabs(t.data);
+        setSponsors(sp.data);
+        if (t.data.length) setActiveTabId(t.data[0].id);
+      }).catch(console.error)
       .finally(() => setLoading(false));
   }, [user]);
 
-  // Sync sponsors changes back to deliverables matrix
+  // Lazy-load the active tab's contents on first view
+  useEffect(() => {
+    if (!activeTabId) return;
+    const t = tabs.find(x => x.id === activeTabId);
+    if (!t) return;
+    if (t.type === 'schedule' && scheduleByTab[activeTabId] === undefined) {
+      api.get(`/schedule?tab_id=${activeTabId}`)
+        .then(r => setScheduleByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
+    }
+    if (t.type === 'deliverables' && delivByTab[activeTabId] === undefined) {
+      api.get(`/deliverables?tab_id=${activeTabId}`)
+        .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(console.error);
+    }
+  }, [activeTabId, tabs]);
+
+  // Per-tab state setters that behave like useState updaters for the active tab
+  const setActiveSchedule = (updater) =>
+    setScheduleByTab(prev => ({ ...prev, [activeTabId]: typeof updater === 'function' ? updater(prev[activeTabId] || []) : updater }));
+  const setActiveDeliverables = (updater) =>
+    setDelivByTab(prev => {
+      const cur = prev[activeTabId] || { deliverables: [], matrix: {} };
+      const nd = typeof updater === 'function' ? updater(cur.deliverables) : updater;
+      return { ...prev, [activeTabId]: { ...cur, deliverables: nd } };
+    });
+  const setActiveMatrix = (updater) =>
+    setDelivByTab(prev => {
+      const cur = prev[activeTabId] || { deliverables: [], matrix: {} };
+      const nm = typeof updater === 'function' ? updater(cur.matrix) : updater;
+      return { ...prev, [activeTabId]: { ...cur, matrix: nm } };
+    });
+
+  // Sponsors are a global pool shared across every tab
   const handleAddSponsor = async (name, status) => {
     const r = await api.post('/sponsors', { name, status });
     setSponsors(prev => [...prev, r.data]);
-    setMatrix(prev => {
-      const updated = { ...prev, [r.data.id]: {} };
-      deliverables.forEach(d => { updated[r.data.id][d.id] = { checked: false, notes: [] }; });
-      return updated;
-    });
   };
 
   const handleDeleteSponsor = async (id) => {
     await api.delete(`/sponsors/${id}`);
     setSponsors(prev => prev.filter(s => s.id !== id));
-    setMatrix(prev => { const u = { ...prev }; delete u[id]; return u; });
-    // Remove from schedule
-    setSchedule(prev => prev.map(d => ({
-      ...d, slots: d.slots.map(slot => ({
-        ...slot, assignments: slot.assignments.filter(a => a.sponsor_id !== id)
-      }))
-    })));
+    // Drop the sponsor from every cached schedule's assignments
+    setScheduleByTab(prev => {
+      const u = {};
+      for (const [k, days] of Object.entries(prev)) {
+        u[k] = days.map(d => ({ ...d, slots: d.slots.map(slot => ({ ...slot, assignments: slot.assignments.filter(a => a.sponsor_id !== id) })) }));
+      }
+      return u;
+    });
+    // Drop the sponsor's row from every cached deliverables matrix
+    setDelivByTab(prev => {
+      const u = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const m = { ...v.matrix }; delete m[id];
+        u[k] = { ...v, matrix: m };
+      }
+      return u;
+    });
   };
 
   const handleStatusChange = async (id, status) => {
     await api.put(`/sponsors/${id}`, { status });
     setSponsors(prev => prev.map(s => s.id === id ? { ...s, status } : s));
+  };
+
+  // Tabs CRUD
+  const handleAddTab = async (name, type) => {
+    const r = await api.post('/tabs', { name, type });
+    setTabs(prev => [...prev, r.data]);
+    setActiveTabId(r.data.id);
+  };
+  const handleRenameTab = async (id, name) => {
+    await api.put(`/tabs/${id}`, { name });
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, name } : t));
+  };
+  const handleDeleteTab = async (id) => {
+    await api.delete(`/tabs/${id}`);
+    setTabs(prev => {
+      const nt = prev.filter(t => t.id !== id);
+      if (activeTabId === id) setActiveTabId(nt[0]?.id || null);
+      return nt;
+    });
+    setScheduleByTab(p => { const u = { ...p }; delete u[id]; return u; });
+    setDelivByTab(p => { const u = { ...p }; delete u[id]; return u; });
+  };
+  const handleReorderTabs = async (ids) => {
+    setTabs(prev => ids.map(id => prev.find(t => t.id === id)).filter(Boolean));
+    try { await api.post('/tabs/reorder', { ids }); } catch { /* keep optimistic order */ }
   };
 
   const handleLogout = async () => {
@@ -578,6 +718,8 @@ export default function MainPage() {
     </div>
   );
 
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
   return (
     <div>
       {/* Header */}
@@ -590,34 +732,50 @@ export default function MainPage() {
       </div>
 
       {/* Tabs */}
-      <div className="tabs">
-        <div className={`tab${tab === 'schedule' ? ' active' : ''}`} onClick={() => setTab('schedule')}>
-          📅 Product Theatre
-        </div>
-        <div className={`tab${tab === 'deliverables' ? ' active' : ''}`} onClick={() => setTab('deliverables')}>
-          📋 Deliverables
-        </div>
-      </div>
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelect={setActiveTabId}
+        onAdd={handleAddTab}
+        onRename={handleRenameTab}
+        onDelete={handleDeleteTab}
+        onReorder={handleReorderTabs}
+      />
 
       {/* Content */}
-      {tab === 'schedule' && (
-        <ScheduleTab
-          sponsors={sponsors}
-          schedule={schedule}
-          setSchedule={setSchedule}
-          onAddSponsor={handleAddSponsor}
-          onDeleteSponsor={handleDeleteSponsor}
-          onStatusChange={handleStatusChange}
-        />
+      {!activeTab && (
+        <div style={{ textAlign: 'center', color: '#a0aec0', padding: 48 }}>
+          No tabs yet — click “+ Add Tab”.
+        </div>
       )}
-      {tab === 'deliverables' && (
-        <DeliverablesTab
-          sponsors={sponsors}
-          deliverables={deliverables}
-          setDeliverables={setDeliverables}
-          matrix={matrix}
-          setMatrix={setMatrix}
-        />
+
+      {activeTab?.type === 'schedule' && (
+        scheduleByTab[activeTabId] === undefined
+          ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
+          : <ScheduleTab
+              key={activeTabId}
+              sponsors={sponsors}
+              schedule={scheduleByTab[activeTabId]}
+              setSchedule={setActiveSchedule}
+              tabId={activeTabId}
+              onAddSponsor={handleAddSponsor}
+              onDeleteSponsor={handleDeleteSponsor}
+              onStatusChange={handleStatusChange}
+            />
+      )}
+
+      {activeTab?.type === 'deliverables' && (
+        delivByTab[activeTabId] === undefined
+          ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
+          : <DeliverablesTab
+              key={activeTabId}
+              sponsors={sponsors}
+              deliverables={delivByTab[activeTabId].deliverables}
+              setDeliverables={setActiveDeliverables}
+              matrix={delivByTab[activeTabId].matrix}
+              setMatrix={setActiveMatrix}
+              tabId={activeTabId}
+            />
       )}
     </div>
   );
