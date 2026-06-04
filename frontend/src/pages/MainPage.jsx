@@ -14,8 +14,9 @@ function SponsorsPanel({ sponsors, onAdd, onDelete, onStatusChange, onDragStart 
     setNewName(''); setAdding(false);
   };
 
-  const confirmed = sponsors.filter(s => s.status === 'confirmed');
-  const probable = sponsors.filter(s => s.status === 'probable');
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  const confirmed = sponsors.filter(s => s.status === 'confirmed').sort(byName);
+  const probable = sponsors.filter(s => s.status === 'probable').sort(byName);
 
   return (
     <div className="sponsors-panel">
@@ -393,8 +394,9 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
     setDeliverables(prev => prev.filter(d => d.id !== id));
   };
 
-  const confirmed = sponsors.filter(s => s.status === 'confirmed');
-  const probable = sponsors.filter(s => s.status === 'probable');
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  const confirmed = sponsors.filter(s => s.status === 'confirmed').sort(byName);
+  const probable = sponsors.filter(s => s.status === 'probable').sort(byName);
   const allSponsors = [...confirmed, ...probable];
 
   return (
