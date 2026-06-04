@@ -92,7 +92,7 @@ function SponsorChip({ sponsor, onDelete, onStatusChange, onDragStart }) {
 }
 
 // ── Schedule Tab ──────────────────────────────────────────
-function ScheduleTab({ sponsors, schedule, setSchedule }) {
+function ScheduleTab({ sponsors, schedule, setSchedule, onAddSponsor, onDeleteSponsor, onStatusChange }) {
   const [dragSponsorId, setDragSponsorId] = useState(null);
   const [addingSlot, setAddingSlot] = useState(null); // dayId
   const [addingDay, setAddingDay] = useState(false);
@@ -160,12 +160,9 @@ function ScheduleTab({ sponsors, schedule, setSchedule }) {
       {/* Sponsors sidebar */}
       <SponsorsPanel
         sponsors={sponsors}
-        onAdd={async (name, status) => {
-          const r = await api.post('/sponsors', { name, status });
-          sponsors.push(r.data); // will be refreshed
-        }}
-        onDelete={async (id) => { await api.delete(`/sponsors/${id}`); }}
-        onStatusChange={async (id, status) => { await api.put(`/sponsors/${id}`, { status }); }}
+        onAdd={onAddSponsor}
+        onDelete={onDeleteSponsor}
+        onStatusChange={onStatusChange}
         onDragStart={setDragSponsorId}
       />
 
@@ -595,7 +592,7 @@ export default function MainPage() {
       {/* Tabs */}
       <div className="tabs">
         <div className={`tab${tab === 'schedule' ? ' active' : ''}`} onClick={() => setTab('schedule')}>
-          📅 Meeting Schedule
+          📅 Product Theatre
         </div>
         <div className={`tab${tab === 'deliverables' ? ' active' : ''}`} onClick={() => setTab('deliverables')}>
           📋 Deliverables
