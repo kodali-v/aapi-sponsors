@@ -44,6 +44,26 @@ router.post('/days', auth, async (req, res) => {
   res.json({ ...r.rows[0], slots: [] });
 });
 
+// Reorder days within a tab (must be before /days/:id)
+router.post('/days/reorder', auth, async (req, res) => {
+  const { order } = req.body; // array of day ids in new left-to-right order
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let i = 0; i < order.length; i++) {
+      await client.query('UPDATE days SET sort_order=$1 WHERE id=$2', [i, order[i]]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'reorder failed' });
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+});
+
 // Delete day
 router.delete('/days/:id', auth, async (req, res) => {
   await pool.query('DELETE FROM days WHERE id=$1', [req.params.id]);

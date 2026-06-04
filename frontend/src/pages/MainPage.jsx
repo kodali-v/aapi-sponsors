@@ -95,6 +95,8 @@ function SponsorChip({ sponsor, onDelete, onStatusChange, onDragStart }) {
 // ── Schedule Tab ──────────────────────────────────────────
 function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onDeleteSponsor, onStatusChange }) {
   const [dragSponsorId, setDragSponsorId] = useState(null);
+  const [dragDayId, setDragDayId] = useState(null);
+  const [overDayId, setOverDayId] = useState(null);
   const [addingSlot, setAddingSlot] = useState(null); // dayId
   const [addingDay, setAddingDay] = useState(false);
   const [newDayName, setNewDayName] = useState('');
@@ -156,6 +158,19 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
     setSchedule(prev => prev.map(d => d.id === dayId ? { ...d, slots: d.slots.filter(s => s.id !== slotId) } : d));
   };
 
+  const handleDayDrop = async (targetId) => {
+    if (!dragDayId || dragDayId === targetId) { setDragDayId(null); setOverDayId(null); return; }
+    const ids = schedule.map(d => d.id);
+    const from = ids.indexOf(dragDayId), to = ids.indexOf(targetId);
+    setDragDayId(null); setOverDayId(null);
+    if (from < 0 || to < 0) return;
+    const reordered = [...schedule];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    setSchedule(reordered);
+    try { await api.post('/schedule/days/reorder', { order: reordered.map(d => d.id) }); } catch { /* keep optimistic order */ }
+  };
+
   return (
     <div style={{ display: 'flex', gap: 20, padding: 24, overflow: 'auto', alignItems: 'flex-start' }}>
       {/* Sponsors sidebar */}
@@ -169,9 +184,18 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
 
       {/* Day columns */}
       {schedule.map(day => (
-        <div key={day.id} className="day-col">
-          <div className="day-header">
-            <span>{day.name}</span>
+        <div key={day.id} className="day-col" style={{ opacity: dragDayId === day.id ? 0.4 : 1, outline: overDayId === day.id ? '2px dashed #1e3a5f' : 'none', outlineOffset: 2 }}>
+          <div className="day-header"
+            draggable
+            onDragStart={() => setDragDayId(day.id)}
+            onDragOver={e => { if (dragDayId) { e.preventDefault(); if (overDayId !== day.id) setOverDayId(day.id); } }}
+            onDrop={() => handleDayDrop(day.id)}
+            onDragEnd={() => { setDragDayId(null); setOverDayId(null); }}
+            style={{ cursor: 'move' }}
+            title="Drag to reorder day">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ opacity: 0.5, fontSize: 12, letterSpacing: -2 }}>⋮⋮</span>{day.name}
+            </span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '2px 8px' }}
                 onClick={() => setAddingSlot(addingSlot === day.id ? null : day.id)}>+ Slot</button>
