@@ -344,14 +344,53 @@ function NotesCell({ value, onSave }) {
   );
 }
 
+// Format a numeric string as USD currency (leaves non-numbers untouched)
+function formatCurrency(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  const n = Number(v);
+  if (Number.isNaN(n)) return v;
+  return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+}
+
+// A text / number / currency cell. Currency shows formatted, edits as a raw number.
+function TypedCell({ type, value, onSave }) {
+  const [val, setVal] = useState(value ?? '');
+  const [editing, setEditing] = useState(false);
+  const commit = () => { setEditing(false); if (val !== (value ?? '')) onSave(val); };
+
+  if (type === 'currency') {
+    return editing ? (
+      <input type="number" step="0.01" className="note-input" autoFocus
+        style={{ width: '100%', padding: '4px 6px' }}
+        value={val} onChange={e => setVal(e.target.value)} onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(value ?? ''); setEditing(false); } }} />
+    ) : (
+      <div onClick={() => setEditing(true)}
+        style={{ cursor: 'text', minHeight: 26, padding: '4px 6px', color: val === '' ? '#a0aec0' : '#1a202c' }}>
+        {val === '' ? '—' : formatCurrency(val)}
+      </div>
+    );
+  }
+  return (
+    <input type={type === 'number' ? 'number' : 'text'} className="note-input"
+      style={{ width: '100%', padding: '4px 6px' }}
+      value={val} placeholder="—"
+      onChange={e => setVal(e.target.value)}
+      onBlur={() => { if (val !== (value ?? '')) onSave(val); }} />
+  );
+}
+
 // ── Deliverables Tab ──────────────────────────────────────
 function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setMatrix, tabId }) {
   const [addingCol, setAddingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
+  const [newColType, setNewColType] = useState('checkbox');
   const [editingNote, setEditingNote] = useState(null); // { sponsorId, deliverableId }
   const [noteInput, setNoteInput] = useState('');
   const [dragColId, setDragColId] = useState(null);
   const [overColId, setOverColId] = useState(null);
+  const [editingColId, setEditingColId] = useState(null);
+  const [editColName, setEditColName] = useState('');
 
   // Notes is always the last, non-draggable column
   const notesCol = deliverables.find(isNotesCol);
@@ -372,44 +411,66 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
     try { await api.put('/deliverables/columns/reorder', { order: next.map(c => c.id) }); } catch { /* keep optimistic order */ }
   };
 
+  // Merge one field into a matrix cell, keeping the rest intact
+  const patchCell = (sponsorId, deliverableId, patch) =>
+    setMatrix(prev => {
+      const cur = prev[sponsorId]?.[deliverableId] || { checked: false, notes: [], value: '' };
+      return { ...prev, [sponsorId]: { ...prev[sponsorId], [deliverableId]: { ...cur, ...patch } } };
+    });
+
   const handleSaveNotes = async (sponsorId, deliverableId, content) => {
-    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { checked: false, notes: content });
-    setMatrix(prev => ({ ...prev, [sponsorId]: { ...prev[sponsorId], [deliverableId]: { checked: false, notes: content } } }));
+    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { notes: content });
+    patchCell(sponsorId, deliverableId, { notes: content });
+  };
+
+  const handleSaveValue = async (sponsorId, deliverableId, value) => {
+    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { value });
+    patchCell(sponsorId, deliverableId, { value });
   };
 
   const handleCheck = async (sponsorId, deliverableId, checked) => {
-    const current = matrix[sponsorId]?.[deliverableId] || { checked: false, notes: [] };
-    const r = await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { checked, notes: current.notes });
-    setMatrix(prev => ({ ...prev, [sponsorId]: { ...prev[sponsorId], [deliverableId]: { checked, notes: current.notes } } }));
+    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { checked });
+    patchCell(sponsorId, deliverableId, { checked });
   };
 
   const handleAddNote = async (sponsorId, deliverableId) => {
     if (!noteInput.trim()) return;
-    const current = matrix[sponsorId]?.[deliverableId] || { checked: false, notes: [] };
-    const newNotes = [...current.notes, noteInput.trim()];
-    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { checked: current.checked, notes: newNotes });
-    setMatrix(prev => ({ ...prev, [sponsorId]: { ...prev[sponsorId], [deliverableId]: { ...current, notes: newNotes } } }));
+    const current = matrix[sponsorId]?.[deliverableId] || { checked: false, notes: [], value: '' };
+    const newNotes = [...(Array.isArray(current.notes) ? current.notes : []), noteInput.trim()];
+    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { notes: newNotes });
+    patchCell(sponsorId, deliverableId, { notes: newNotes });
     setNoteInput(''); setEditingNote(null);
   };
 
   const handleDeleteNote = async (sponsorId, deliverableId, idx) => {
-    const current = matrix[sponsorId]?.[deliverableId] || { checked: false, notes: [] };
-    const newNotes = current.notes.filter((_, i) => i !== idx);
-    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { checked: current.checked, notes: newNotes });
-    setMatrix(prev => ({ ...prev, [sponsorId]: { ...prev[sponsorId], [deliverableId]: { ...current, notes: newNotes } } }));
+    const current = matrix[sponsorId]?.[deliverableId] || { checked: false, notes: [], value: '' };
+    const newNotes = (Array.isArray(current.notes) ? current.notes : []).filter((_, i) => i !== idx);
+    await api.put(`/deliverables/${sponsorId}/${deliverableId}`, { notes: newNotes });
+    patchCell(sponsorId, deliverableId, { notes: newNotes });
   };
 
   const handleAddCol = async () => {
     if (!newColName.trim()) return;
-    const r = await api.post('/deliverables/columns', { name: newColName.trim(), tab_id: tabId });
+    const r = await api.post('/deliverables/columns', { name: newColName.trim(), col_type: newColType, tab_id: tabId });
     setDeliverables(prev => [...prev, r.data]);
-    // Init matrix for new column
     setMatrix(prev => {
       const updated = { ...prev };
-      sponsors.forEach(s => { updated[s.id] = { ...updated[s.id], [r.data.id]: { checked: false, notes: [] } }; });
+      sponsors.forEach(s => { updated[s.id] = { ...updated[s.id], [r.data.id]: { checked: false, notes: [], value: '' } }; });
       return updated;
     });
-    setNewColName(''); setAddingCol(false);
+    setNewColName(''); setNewColType('checkbox'); setAddingCol(false);
+  };
+
+  const handleRenameCol = async (id, name) => {
+    setEditingColId(null);
+    if (!name.trim()) return;
+    await api.put(`/deliverables/columns/${id}`, { name: name.trim() });
+    setDeliverables(prev => prev.map(d => d.id === id ? { ...d, name: name.trim() } : d));
+  };
+
+  const handleColType = async (id, col_type) => {
+    await api.put(`/deliverables/columns/${id}`, { col_type });
+    setDeliverables(prev => prev.map(d => d.id === id ? { ...d, col_type } : d));
   };
 
   const handleDeleteCol = async (id) => {
@@ -432,6 +493,13 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
               onChange={e => setNewColName(e.target.value)} autoFocus
               onKeyDown={e => { if (e.key === 'Enter') handleAddCol(); if (e.key === 'Escape') setAddingCol(false); }}
               style={{ width: 160 }} />
+            <select value={newColType} onChange={e => setNewColType(e.target.value)}
+              style={{ padding: '7px 8px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }}>
+              <option value="checkbox">☑ Checkbox</option>
+              <option value="text">🔤 Text</option>
+              <option value="number">🔢 Number</option>
+              <option value="currency">💲 Currency</option>
+            </select>
             <button className="btn btn-navy btn-sm" onClick={handleAddCol}>Add</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setAddingCol(false)}>Cancel</button>
           </div>
@@ -446,20 +514,42 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
             <th style={{ minWidth: 160 }}>Company</th>
             <th style={{ minWidth: 80 }}>Status</th>
             {cols.map(d => (
-              <th key={d.id} style={{ minWidth: 120, cursor: 'move', opacity: dragColId === d.id ? 0.4 : 1, outline: overColId === d.id ? '2px dashed rgba(255,255,255,0.7)' : 'none', outlineOffset: -2 }}
-                draggable
+              <th key={d.id} style={{ minWidth: 130, cursor: editingColId === d.id ? 'default' : 'move', opacity: dragColId === d.id ? 0.4 : 1, outline: overColId === d.id ? '2px dashed rgba(255,255,255,0.7)' : 'none', outlineOffset: -2 }}
+                draggable={editingColId !== d.id}
                 onDragStart={() => setDragColId(d.id)}
                 onDragOver={e => { e.preventDefault(); if (overColId !== d.id) setOverColId(d.id); }}
                 onDragLeave={() => { if (overColId === d.id) setOverColId(null); }}
                 onDrop={() => handleColDrop(d.id)}
                 onDragEnd={() => { setDragColId(null); setOverColId(null); }}
-                title="Drag to reorder column">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ opacity: 0.5, fontSize: 11, letterSpacing: -2 }}>⋮⋮</span>{d.name}
-                  </span>
-                  <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 11 }}
-                    onClick={() => handleDeleteCol(d.id)} title="Delete column">✕</span>
+                title="Drag to reorder · double-click name to rename">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                      <span style={{ opacity: 0.5, fontSize: 11, letterSpacing: -2 }}>⋮⋮</span>
+                      {editingColId === d.id ? (
+                        <input autoFocus value={editColName}
+                          onChange={e => setEditColName(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          onBlur={() => handleRenameCol(d.id, editColName)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameCol(d.id, editColName); if (e.key === 'Escape') setEditingColId(null); }}
+                          style={{ font: 'inherit', width: 110, padding: '2px 4px', color: '#1a202c', borderRadius: 4, border: 'none' }} />
+                      ) : (
+                        <span onDoubleClick={() => { setEditingColId(d.id); setEditColName(d.name); }}
+                          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                      )}
+                    </span>
+                    <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 11 }}
+                      onClick={() => handleDeleteCol(d.id)} title="Delete column">✕</span>
+                  </div>
+                  <select value={d.col_type || 'checkbox'} onClick={e => e.stopPropagation()}
+                    onChange={e => handleColType(d.id, e.target.value)}
+                    title="Column type"
+                    style={{ fontSize: 11, padding: '1px 2px', borderRadius: 4, border: 'none', color: '#1a202c', fontFamily: 'inherit', cursor: 'pointer' }}>
+                    <option value="checkbox">☑ Checkbox</option>
+                    <option value="text">🔤 Text</option>
+                    <option value="number">🔢 Number</option>
+                    <option value="currency">💲 Currency</option>
+                  </select>
                 </div>
               </th>
             ))}
@@ -472,13 +562,25 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
               <td className="company-cell">{sponsor.name}</td>
               <td><span className={`badge badge-${sponsor.status}`}>{sponsor.status}</span></td>
               {orderedDeliverables.map(d => {
-                const cell = matrix[sponsor.id]?.[d.id] || { checked: false, notes: [] };
+                const cell = matrix[sponsor.id]?.[d.id] || { checked: false, notes: [], value: '' };
                 if (isNotesCol(d)) {
                   return (
                     <td key={d.id} style={{ verticalAlign: 'top' }}>
                       <NotesCell
                         value={cell.notes}
                         onSave={content => handleSaveNotes(sponsor.id, d.id, content)}
+                      />
+                    </td>
+                  );
+                }
+                const colType = d.col_type || 'checkbox';
+                if (colType !== 'checkbox') {
+                  return (
+                    <td key={d.id} style={{ verticalAlign: 'top' }}>
+                      <TypedCell
+                        type={colType}
+                        value={cell.value}
+                        onSave={v => handleSaveValue(sponsor.id, d.id, v)}
                       />
                     </td>
                   );

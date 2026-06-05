@@ -84,6 +84,10 @@ const initDB = async () => {
       ALTER TABLE days ADD COLUMN IF NOT EXISTS tab_id UUID REFERENCES tabs(id) ON DELETE CASCADE;
       ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS tab_id UUID REFERENCES tabs(id) ON DELETE CASCADE;
 
+      -- Per-column data type (checkbox | text | number | currency) and a free value for non-checkbox cells
+      ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS col_type VARCHAR(20) DEFAULT 'checkbox';
+      ALTER TABLE sponsor_deliverables ADD COLUMN IF NOT EXISTS value TEXT DEFAULT '';
+
       -- Idempotent migration + safe default seeding (no duplicates on restart)
       DO $$
       DECLARE
