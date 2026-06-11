@@ -102,6 +102,7 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
   const [newDayName, setNewDayName] = useState('');
   const [newStart, setNewStart] = useState('');
   const [newEnd, setNewEnd] = useState('');
+  const [slotError, setSlotError] = useState('');
 
   const handleDrop = async (slotId) => {
     if (!dragSponsorId) return;
@@ -134,10 +135,17 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
   };
 
   const handleAddSlot = async (dayId) => {
-    if (!newStart || !newEnd) return;
-    const r = await api.post(`/schedule/days/${dayId}/slots`, { start_time: newStart, end_time: newEnd });
+    let start = newStart.trim();
+    let end = newEnd.trim();
+    // If the whole range was typed into the Start box (e.g. "12:00 PM - 1:00 PM"), split it
+    if (start && !end) {
+      const parts = start.split(/\s*(?:–|—|-|\bto\b)\s*/i);
+      if (parts.length === 2 && parts[0] && parts[1]) { start = parts[0].trim(); end = parts[1].trim(); }
+    }
+    if (!start || !end) { setSlotError('Enter both a start and end time'); return; }
+    const r = await api.post(`/schedule/days/${dayId}/slots`, { start_time: start, end_time: end });
     setSchedule(prev => prev.map(d => d.id === dayId ? { ...d, slots: [...d.slots, r.data] } : d));
-    setNewStart(''); setNewEnd(''); setAddingSlot(null);
+    setNewStart(''); setNewEnd(''); setSlotError(''); setAddingSlot(null);
   };
 
   const handleAddDay = async () => {
@@ -207,12 +215,19 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
           {addingSlot === day.id && (
             <div style={{ background: '#f0f4f8', padding: 10, border: '1px solid #e2e8f0', borderTop: 'none' }}>
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                <input className="form-input" placeholder="Start (e.g. 7:30 AM)" value={newStart} onChange={e => setNewStart(e.target.value)} style={{ flex: 1 }} />
-                <input className="form-input" placeholder="End (e.g. 8:15 AM)" value={newEnd} onChange={e => setNewEnd(e.target.value)} style={{ flex: 1 }} />
+                <input className="form-input" placeholder="Start (e.g. 7:30 AM)" value={newStart}
+                  onChange={e => { setNewStart(e.target.value); if (slotError) setSlotError(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddSlot(day.id); if (e.key === 'Escape') { setAddingSlot(null); setSlotError(''); } }}
+                  style={{ flex: 1 }} />
+                <input className="form-input" placeholder="End (e.g. 8:15 AM)" value={newEnd}
+                  onChange={e => { setNewEnd(e.target.value); if (slotError) setSlotError(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddSlot(day.id); if (e.key === 'Escape') { setAddingSlot(null); setSlotError(''); } }}
+                  style={{ flex: 1 }} />
               </div>
+              {slotError && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 6 }}>{slotError}</div>}
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn btn-navy btn-sm" onClick={() => handleAddSlot(day.id)}>Add</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => setAddingSlot(null)}>Cancel</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setAddingSlot(null); setSlotError(''); }}>Cancel</button>
               </div>
             </div>
           )}
