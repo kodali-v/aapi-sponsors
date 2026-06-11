@@ -671,39 +671,38 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
   );
 }
 
-// ── Exhibits Tab ──────────────────────────────────────────
+// ── Table tabs (Exhibits, Sponsors): fixed columns, zebra rows, Excel import ──
 const EXHIBIT_COLS = [
-  { key: 'booth', label: 'Booth #', w: 64 },
-  { key: 'company', label: 'Company Name', w: 150 },
-  { key: 'price', label: 'Price', w: 92, money: true },
-  { key: 'paid', label: 'Paid', w: 92, money: true },
-  { key: 'size', label: 'Size', w: 72 },
-  { key: 'contact', label: 'Contact name', w: 130 },
-  { key: 'cell', label: 'Cell', w: 110 },
-  { key: 'email', label: 'Email', w: 170 },
-  { key: 'remarks', label: 'Remarks', w: 180 },
-  { key: 'status', label: 'Confirmed/Pending', w: 124 },
+  { key: 'booth', label: 'Booth #', w: 64, aliases: ['booth', 'booth#', 'boothnumber', 'boothno'] },
+  { key: 'company', label: 'Company Name', w: 150, aliases: ['companyname', 'company', 'exhibitor', 'exhibitorname'] },
+  { key: 'price', label: 'Price', w: 92, money: true, aliases: ['price', 'amount', 'cost', 'fee'] },
+  { key: 'paid', label: 'Paid', w: 92, money: true, aliases: ['paid', 'payment', 'amountpaid'] },
+  { key: 'size', label: 'Size', w: 72, aliases: ['size', 'boothsize'] },
+  { key: 'contact', label: 'Contact name', w: 130, aliases: ['pcontactname', 'contactname', 'contact', 'primarycontact', 'poc'] },
+  { key: 'cell', label: 'Cell', w: 110, aliases: ['cell', 'cellphone', 'phone', 'mobile', 'phonenumber'] },
+  { key: 'email', label: 'Email', w: 170, aliases: ['email', 'emailaddress', 'mail'] },
+  { key: 'remarks', label: 'Remarks', w: 180, aliases: ['remarks', 'notes', 'comments', 'comment'] },
+  { key: 'status', label: 'Confirmed/Pending', w: 124, status: true, aliases: ['confirmedpending', 'status', 'confirmed', 'pending', 'confirmation'] },
 ];
-const EXHIBIT_ALIASES = {
-  booth: ['booth', 'booth#', 'boothnumber', 'boothno'],
-  company: ['companyname', 'company', 'exhibitor', 'exhibitorname'],
-  price: ['price', 'amount', 'cost', 'fee'],
-  paid: ['paid', 'payment', 'amountpaid'],
-  size: ['size', 'boothsize'],
-  contact: ['pcontactname', 'contactname', 'contact', 'primarycontact', 'poc'],
-  cell: ['cell', 'cellphone', 'phone', 'mobile', 'phonenumber'],
-  email: ['email', 'emailaddress', 'mail'],
-  remarks: ['remarks', 'notes', 'comments', 'comment'],
-  status: ['confirmedpending', 'status', 'confirmed', 'pending', 'confirmation'],
-};
+const SPONSOR_COLS = [
+  { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'sponsor', 'sponsorname'] },
+  { key: 'contact', label: 'Company Contact', w: 150, aliases: ['companycontact', 'contact', 'contactname', 'contactperson'] },
+  { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
+  { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
+  { key: 'amount', label: 'Sponsorship Amt ($)', w: 140, money: true, aliases: ['sponsorshipamt', 'sponsorshipamount', 'sponsorship', 'amount', 'amt', 'pledged'] },
+  { key: 'received', label: 'Amount Received ($)', w: 140, money: true, aliases: ['amountreceived', 'received', 'paid', 'amtreceived'] },
+  { key: 'status', label: 'Confirmed/Pending', w: 124, status: true, aliases: ['confirmedpending', 'status', 'confirmed', 'pending', 'confirmation'] },
+  { key: 'aapi', label: 'AAPI Contact Person', w: 160, aliases: ['aapicontactperson', 'aapicontact', 'aapi', 'aapiperson', 'assignedto'] },
+];
+const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS };
 const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Map one parsed spreadsheet row (keyed by its headers) to our column keys
-function mapExcelRow(raw) {
+function mapExcelRow(raw, cols) {
   const entries = Object.entries(raw);
   const out = {};
-  for (const col of EXHIBIT_COLS) {
-    const aliases = EXHIBIT_ALIASES[col.key] || [normHeader(col.label)];
+  for (const col of cols) {
+    const aliases = col.aliases || [normHeader(col.label)];
     let found = entries.find(([h]) => aliases.includes(normHeader(h)));
     if (!found) found = entries.find(([h]) => aliases.some(a => normHeader(h).includes(a)));
     out[col.key] = found ? String(found[1] ?? '').trim() : '';
@@ -711,7 +710,7 @@ function mapExcelRow(raw) {
   return out;
 }
 
-function ExhibitsTab({ rows, setRows, tabId }) {
+function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
   const fileRef = useRef(null);
   const [importing, setImporting] = useState(false);
 
@@ -743,7 +742,7 @@ function ExhibitsTab({ rows, setRows, tabId }) {
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-      const mapped = json.map(mapExcelRow).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
+      const mapped = json.map(r => mapExcelRow(r, cols)).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
       if (!mapped.length) { alert('No data rows found. Make sure the first row has column headers.'); return; }
       const res = await api.post('/exhibits/bulk', { tab_id: tabId, rows: mapped });
       setRows(prev => [...prev, ...res.data]);
@@ -769,19 +768,19 @@ function ExhibitsTab({ rows, setRows, tabId }) {
       <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
-            {EXHIBIT_COLS.map(c => <th key={c.key} style={{ width: c.w, minWidth: c.w, whiteSpace: 'nowrap' }}>{c.label}</th>)}
+            {cols.map(c => <th key={c.key} style={{ width: c.w, minWidth: c.w, whiteSpace: 'nowrap' }}>{c.label}</th>)}
             <th style={{ width: 36 }}></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9' }}>
-              {EXHIBIT_COLS.map(c => (
+              {cols.map(c => (
                 <td key={c.key} style={{ padding: 2 }}>
-                  {c.key === 'status' ? (
+                  {c.status ? (
                     <select className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
-                      value={row.data?.status || ''}
-                      onChange={e => saveCell(row.id, 'status', e.target.value)}>
+                      value={row.data?.[c.key] || ''}
+                      onChange={e => saveCell(row.id, c.key, e.target.value)}>
                       <option value="">—</option>
                       <option value="Confirmed">Confirmed</option>
                       <option value="Pending">Pending</option>
@@ -802,7 +801,7 @@ function ExhibitsTab({ rows, setRows, tabId }) {
 
       {rows.length === 0 && (
         <div style={{ textAlign: 'center', color: '#a0aec0', padding: 40 }}>
-          No exhibitors yet — click “+ Add Row”, or “Upload Excel/CSV” to import a list.
+          No {noun}s yet — click “+ Add Row”, or “Upload Excel/CSV” to import a list.
         </div>
       )}
     </div>
@@ -891,7 +890,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
               onKeyDown={e => { if (e.key === 'Enter') submitRename(t.id); if (e.key === 'Escape') setEditingId(null); }}
               style={{ font: 'inherit', width: 120, padding: '2px 4px' }} />
           ) : (
-            <span>{t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : '📅'} {t.name}</span>
+            <span>{t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : '📅'} {t.name}</span>
           )}
           <span style={{ opacity: 0.4, fontSize: 12 }} title="Delete tab"
             onClick={e => { e.stopPropagation(); if (window.confirm(`Delete tab "${t.name}" and its contents?`)) onDelete(t.id); }}>✕</span>
@@ -909,6 +908,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
             <option value="schedule">📅 Schedule board</option>
             <option value="deliverables">📋 Deliverables table</option>
             <option value="exhibits">🏢 Exhibits table</option>
+            <option value="sponsorlist">🤝 Sponsors table</option>
           </select>
           <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -957,7 +957,7 @@ export default function MainPage() {
       api.get(`/deliverables?tab_id=${activeTabId}`)
         .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(console.error);
     }
-    if (t.type === 'exhibits' && exhibitsByTab[activeTabId] === undefined) {
+    if ((t.type === 'exhibits' || t.type === 'sponsorlist') && exhibitsByTab[activeTabId] === undefined) {
       api.get(`/exhibits?tab_id=${activeTabId}`)
         .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
     }
@@ -980,7 +980,7 @@ export default function MainPage() {
       } else if (t?.type === 'deliverables') {
         api.get(`/deliverables?tab_id=${activeTabId}`)
           .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(() => {});
-      } else if (t?.type === 'exhibits') {
+      } else if (t?.type === 'exhibits' || t?.type === 'sponsorlist') {
         api.get(`/exhibits?tab_id=${activeTabId}`)
           .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(() => {});
       }
@@ -1137,14 +1137,16 @@ export default function MainPage() {
             />
       )}
 
-      {activeTab?.type === 'exhibits' && (
+      {(activeTab?.type === 'exhibits' || activeTab?.type === 'sponsorlist') && (
         exhibitsByTab[activeTabId] === undefined
           ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
-          : <ExhibitsTab
+          : <TableTab
               key={activeTabId}
               rows={exhibitsByTab[activeTabId]}
               setRows={setActiveExhibits}
               tabId={activeTabId}
+              cols={TABLE_COLS[activeTab.type]}
+              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : 'exhibitor'}
             />
       )}
     </div>
