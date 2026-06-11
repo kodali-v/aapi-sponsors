@@ -88,6 +88,15 @@ const initDB = async () => {
       ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS col_type VARCHAR(20) DEFAULT 'checkbox';
       ALTER TABLE sponsor_deliverables ADD COLUMN IF NOT EXISTS value TEXT DEFAULT '';
 
+      -- Exhibits tab: free-form rows (one per exhibitor), values stored as JSONB keyed by column
+      CREATE TABLE IF NOT EXISTS exhibit_rows (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tab_id UUID REFERENCES tabs(id) ON DELETE CASCADE,
+        data JSONB DEFAULT '{}'::jsonb,
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
       -- Idempotent migration + safe default seeding (no duplicates on restart)
       DO $$
       DECLARE

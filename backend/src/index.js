@@ -13,6 +13,7 @@ app.use('/api/tabs', require('./routes/tabs'));
 app.use('/api/sponsors', require('./routes/sponsors'));
 app.use('/api/schedule', require('./routes/schedule'));
 app.use('/api/deliverables', require('./routes/deliverables'));
+app.use('/api/exhibits', require('./routes/exhibits'));
 
 const PORT = process.env.PORT || 4000;
 initDB().then(() => app.listen(PORT, () => console.log(`Backend on :${PORT}`))).catch(e => { console.error(e); process.exit(1); });

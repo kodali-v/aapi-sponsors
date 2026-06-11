@@ -1,0 +1,75 @@
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const { pool } = require('../db');
+const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
+
+const auth = (req, res, next) => {
+  try { jwt.verify(req.cookies?.sponsors_token, JWT_SECRET); next(); }
+  catch { res.status(401).json({ error: 'Not authenticated' }); }
+};
+
+// List rows for an exhibits tab
+router.get('/', auth, async (req, res) => {
+  const { tab_id } = req.query;
+  const r = tab_id
+    ? await pool.query('SELECT * FROM exhibit_rows WHERE tab_id=$1 ORDER BY sort_order, created_at', [tab_id])
+    : await pool.query('SELECT * FROM exhibit_rows ORDER BY sort_order, created_at');
+  res.json(r.rows);
+});
+
+// Add one row
+router.post('/', auth, async (req, res) => {
+  const { tab_id, data } = req.body;
+  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null]);
+  const r = await pool.query(
+    'INSERT INTO exhibit_rows (tab_id, data, sort_order) VALUES ($1,$2,$3) RETURNING *',
+    [tab_id || null, JSON.stringify(data || {}), max.rows[0].m + 1]
+  );
+  res.json(r.rows[0]);
+});
+
+// Bulk import (from Excel/CSV upload) — must be before /:id
+router.post('/bulk', auth, async (req, res) => {
+  const { tab_id, rows } = req.body;
+  if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows must be an array' });
+  const client = await pool.connect();
+  const inserted = [];
+  try {
+    await client.query('BEGIN');
+    let max = (await client.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null])).rows[0].m;
+    for (const data of rows) {
+      max += 1;
+      const r = await client.query(
+        'INSERT INTO exhibit_rows (tab_id, data, sort_order) VALUES ($1,$2,$3) RETURNING *',
+        [tab_id || null, JSON.stringify(data || {}), max]
+      );
+      inserted.push(r.rows[0]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'bulk insert failed' });
+  } finally {
+    client.release();
+  }
+  res.json(inserted);
+});
+
+// Update a row's data
+router.put('/:id', auth, async (req, res) => {
+  const { data } = req.body;
+  const r = await pool.query(
+    'UPDATE exhibit_rows SET data=$1 WHERE id=$2 RETURNING *',
+    [JSON.stringify(data || {}), req.params.id]
+  );
+  res.json(r.rows[0]);
+});
+
+// Delete a row
+router.delete('/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM exhibit_rows WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+module.exports = router;

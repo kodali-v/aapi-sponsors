@@ -671,6 +671,155 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
   );
 }
 
+// ── Exhibits Tab ──────────────────────────────────────────
+const EXHIBIT_COLS = [
+  { key: 'booth', label: 'Booth #' },
+  { key: 'company', label: 'Company Name' },
+  { key: 'price', label: 'Price' },
+  { key: 'paid', label: 'Paid' },
+  { key: 'size', label: 'Size' },
+  { key: 'contact', label: 'Pcontact name' },
+  { key: 'cell', label: 'Cell' },
+  { key: 'email', label: 'Email' },
+  { key: 'remarks', label: 'Remarks' },
+  { key: 'status', label: 'Confirmed/Pending' },
+];
+const EXHIBIT_ALIASES = {
+  booth: ['booth', 'booth#', 'boothnumber', 'boothno'],
+  company: ['companyname', 'company', 'exhibitor', 'exhibitorname'],
+  price: ['price', 'amount', 'cost', 'fee'],
+  paid: ['paid', 'payment', 'amountpaid'],
+  size: ['size', 'boothsize'],
+  contact: ['pcontactname', 'contactname', 'contact', 'primarycontact', 'poc'],
+  cell: ['cell', 'cellphone', 'phone', 'mobile', 'phonenumber'],
+  email: ['email', 'emailaddress', 'mail'],
+  remarks: ['remarks', 'notes', 'comments', 'comment'],
+  status: ['confirmedpending', 'status', 'confirmed', 'pending', 'confirmation'],
+};
+const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Map one parsed spreadsheet row (keyed by its headers) to our column keys
+function mapExcelRow(raw) {
+  const entries = Object.entries(raw);
+  const out = {};
+  for (const col of EXHIBIT_COLS) {
+    const aliases = EXHIBIT_ALIASES[col.key] || [normHeader(col.label)];
+    let found = entries.find(([h]) => aliases.includes(normHeader(h)));
+    if (!found) found = entries.find(([h]) => aliases.some(a => normHeader(h).includes(a)));
+    out[col.key] = found ? String(found[1] ?? '').trim() : '';
+  }
+  return out;
+}
+
+function ExhibitsTab({ rows, setRows, tabId }) {
+  const fileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+
+  const addRow = async () => {
+    const r = await api.post('/exhibits', { tab_id: tabId, data: {} });
+    setRows(prev => [...prev, r.data]);
+  };
+
+  const saveCell = async (rowId, key, value) => {
+    const row = rows.find(x => x.id === rowId);
+    const data = { ...(row?.data || {}), [key]: value };
+    setRows(prev => prev.map(x => x.id === rowId ? { ...x, data } : x));
+    try { await api.put(`/exhibits/${rowId}`, { data }); } catch { /* keep optimistic value */ }
+  };
+
+  const deleteRow = async (rowId) => {
+    if (!window.confirm('Delete this row?')) return;
+    setRows(prev => prev.filter(x => x.id !== rowId));
+    try { await api.delete(`/exhibits/${rowId}`); } catch {}
+  };
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const mapped = json.map(mapExcelRow).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
+      if (!mapped.length) { alert('No data rows found. Make sure the first row has column headers.'); return; }
+      const res = await api.post('/exhibits/bulk', { tab_id: tabId, rows: mapped });
+      setRows(prev => [...prev, ...res.data]);
+      alert(`Imported ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
+    } catch (err) {
+      alert('Could not read that file. Please upload a .xlsx or .csv with column headers in the first row.');
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div style={{ padding: 24, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
+        <button className="btn btn-ghost btn-sm" disabled={importing} onClick={() => fileRef.current?.click()}>
+          {importing ? 'Importing…' : '⬆ Upload Excel/CSV'}
+        </button>
+        <button className="btn btn-navy btn-sm" onClick={addRow}>+ Add Row</button>
+      </div>
+
+      <table className="del-table">
+        <thead>
+          <tr>
+            {EXHIBIT_COLS.map(c => <th key={c.key} style={{ minWidth: c.key === 'remarks' ? 180 : 110 }}>{c.label}</th>)}
+            <th style={{ width: 40 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9' }}>
+              {EXHIBIT_COLS.map(c => (
+                <td key={c.key} style={{ padding: 4 }}>
+                  {c.key === 'status' ? (
+                    <select className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+                      value={row.data?.status || ''}
+                      onChange={e => saveCell(row.id, 'status', e.target.value)}>
+                      <option value="">—</option>
+                      <option value="Confirmed">Confirmed</option>
+                      <option value="Pending">Pending</option>
+                    </select>
+                  ) : (
+                    <ExhibitCell value={row.data?.[c.key] || ''} onSave={v => saveCell(row.id, c.key, v)} />
+                  )}
+                </td>
+              ))}
+              <td style={{ textAlign: 'center' }}>
+                <span style={{ cursor: 'pointer', color: '#dc2626', fontSize: 12 }} title="Delete row"
+                  onClick={() => deleteRow(row.id)}>✕</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {rows.length === 0 && (
+        <div style={{ textAlign: 'center', color: '#a0aec0', padding: 40 }}>
+          No exhibitors yet — click “+ Add Row”, or “Upload Excel/CSV” to import a list.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One editable exhibit cell (keeps local state so background refresh won't clobber typing)
+function ExhibitCell({ value, onSave }) {
+  const [val, setVal] = useState(value ?? '');
+  return (
+    <input className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+      value={val} placeholder="—"
+      onChange={e => setVal(e.target.value)}
+      onBlur={() => { if (val !== (value ?? '')) onSave(val); }} />
+  );
+}
+
 // ── Tab Bar (add / rename / delete / reorder tabs) ────────
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder }) {
   const [adding, setAdding] = useState(false);
@@ -725,7 +874,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
               onKeyDown={e => { if (e.key === 'Enter') submitRename(t.id); if (e.key === 'Escape') setEditingId(null); }}
               style={{ font: 'inherit', width: 120, padding: '2px 4px' }} />
           ) : (
-            <span>{t.type === 'deliverables' ? '📋' : '📅'} {t.name}</span>
+            <span>{t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : '📅'} {t.name}</span>
           )}
           <span style={{ opacity: 0.4, fontSize: 12 }} title="Delete tab"
             onClick={e => { e.stopPropagation(); if (window.confirm(`Delete tab "${t.name}" and its contents?`)) onDelete(t.id); }}>✕</span>
@@ -742,6 +891,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
             style={{ padding: '7px 8px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }}>
             <option value="schedule">📅 Schedule board</option>
             <option value="deliverables">📋 Deliverables table</option>
+            <option value="exhibits">🏢 Exhibits table</option>
           </select>
           <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -762,6 +912,7 @@ export default function MainPage() {
   const [sponsors, setSponsors] = useState([]);
   const [scheduleByTab, setScheduleByTab] = useState({}); // tabId -> days[]
   const [delivByTab, setDelivByTab] = useState({});       // tabId -> { deliverables, matrix }
+  const [exhibitsByTab, setExhibitsByTab] = useState({}); // tabId -> rows[]
   const [loading, setLoading] = useState(true);
 
   // Initial load: tabs + sponsors (tab contents load lazily)
@@ -789,6 +940,10 @@ export default function MainPage() {
       api.get(`/deliverables?tab_id=${activeTabId}`)
         .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(console.error);
     }
+    if (t.type === 'exhibits' && exhibitsByTab[activeTabId] === undefined) {
+      api.get(`/exhibits?tab_id=${activeTabId}`)
+        .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
+    }
   }, [activeTabId, tabs]);
 
   // Background auto-refresh every 15s so edits from other people show up.
@@ -808,6 +963,9 @@ export default function MainPage() {
       } else if (t?.type === 'deliverables') {
         api.get(`/deliverables?tab_id=${activeTabId}`)
           .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(() => {});
+      } else if (t?.type === 'exhibits') {
+        api.get(`/exhibits?tab_id=${activeTabId}`)
+          .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(() => {});
       }
     }, 15000);
     return () => clearInterval(id);
@@ -828,6 +986,8 @@ export default function MainPage() {
       const nm = typeof updater === 'function' ? updater(cur.matrix) : updater;
       return { ...prev, [activeTabId]: { ...cur, matrix: nm } };
     });
+  const setActiveExhibits = (updater) =>
+    setExhibitsByTab(prev => ({ ...prev, [activeTabId]: typeof updater === 'function' ? updater(prev[activeTabId] || []) : updater }));
 
   // Sponsors are a global pool shared across every tab
   const handleAddSponsor = async (name, status) => {
@@ -881,6 +1041,7 @@ export default function MainPage() {
     });
     setScheduleByTab(p => { const u = { ...p }; delete u[id]; return u; });
     setDelivByTab(p => { const u = { ...p }; delete u[id]; return u; });
+    setExhibitsByTab(p => { const u = { ...p }; delete u[id]; return u; });
   };
   const handleReorderTabs = async (ids) => {
     setTabs(prev => ids.map(id => prev.find(t => t.id === id)).filter(Boolean));
@@ -955,6 +1116,17 @@ export default function MainPage() {
               setDeliverables={setActiveDeliverables}
               matrix={delivByTab[activeTabId].matrix}
               setMatrix={setActiveMatrix}
+              tabId={activeTabId}
+            />
+      )}
+
+      {activeTab?.type === 'exhibits' && (
+        exhibitsByTab[activeTabId] === undefined
+          ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
+          : <ExhibitsTab
+              key={activeTabId}
+              rows={exhibitsByTab[activeTabId]}
+              setRows={setActiveExhibits}
               tabId={activeTabId}
             />
       )}

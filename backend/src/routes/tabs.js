@@ -9,7 +9,7 @@ const auth = (req, res, next) => {
   catch { res.status(401).json({ error: 'Not authenticated' }); }
 };
 
-const VALID_TYPES = ['schedule', 'deliverables'];
+const VALID_TYPES = ['schedule', 'deliverables', 'exhibits'];
 
 // List tabs
 router.get('/', auth, async (req, res) => {
