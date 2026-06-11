@@ -768,7 +768,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
       <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
-            {cols.map(c => <th key={c.key} style={{ width: c.w, minWidth: c.w, whiteSpace: 'nowrap' }}>{c.label}</th>)}
+            {cols.map(c => <th key={c.key} style={{ minWidth: c.w, whiteSpace: 'nowrap' }}>{c.label}</th>)}
             <th style={{ width: 36 }}></th>
           </tr>
         </thead>
@@ -812,24 +812,27 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
 function ExhibitCell({ value, onSave, money }) {
   const [val, setVal] = useState(value ?? '');
   const [editing, setEditing] = useState(false);
+  // Auto-size to content (in chars) so columns fit their values
+  const size = Math.min(48, Math.max(8, String(val ?? '').length + 1));
+  const inputStyle = { width: 'auto', padding: '4px 6px', background: 'transparent' };
 
   if (money) {
     const commit = () => { setEditing(false); if (val !== (value ?? '')) onSave(val); };
     return editing ? (
-      <input className="note-input" autoFocus inputMode="decimal"
-        style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+      <input className="note-input" autoFocus inputMode="decimal" size={size}
+        style={{ ...inputStyle, textAlign: 'right' }}
         value={val} placeholder="$"
         onChange={e => setVal(e.target.value)} onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(value ?? ''); setEditing(false); } }} />
     ) : (
       <div onClick={() => setEditing(true)}
-        style={{ cursor: 'text', minHeight: 26, padding: '4px 6px', textAlign: 'right', color: val === '' ? '#a0aec0' : '#1a202c' }}>
+        style={{ cursor: 'text', minHeight: 26, padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap', color: val === '' ? '#a0aec0' : '#1a202c' }}>
         {val === '' ? '—' : formatCurrency(val)}
       </div>
     );
   }
   return (
-    <input className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+    <input className="note-input" size={size} style={inputStyle}
       value={val} placeholder="—"
       onChange={e => setVal(e.target.value)}
       onBlur={() => { if (val !== (value ?? '')) onSave(val); }} />
