@@ -367,6 +367,24 @@ function NotesCell({ value, onSave }) {
   );
 }
 
+// Compare two cell values for sorting. money=true sorts numerically; empties always sort last.
+function cmpVals(a, b, money) {
+  const ae = a === '' || a === null || a === undefined;
+  const be = b === '' || b === null || b === undefined;
+  if (ae && be) return 0;
+  if (ae) return 1;
+  if (be) return -1;
+  if (money) {
+    const na = Number(String(a).replace(/[^0-9.-]/g, ''));
+    const nb = Number(String(b).replace(/[^0-9.-]/g, ''));
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+  }
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+// Arrow shown on the active sort header
+const sortArrow = (active, dir) => active ? (dir === 1 ? ' ▲' : ' ▼') : '';
+
 // Format a numeric string as USD currency (strips $ and commas; leaves true non-numbers untouched)
 function formatCurrency(v) {
   if (v === '' || v === null || v === undefined) return '';
@@ -422,6 +440,8 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
   const [overColId, setOverColId] = useState(null);
   const [editingColId, setEditingColId] = useState(null);
   const [editColName, setEditColName] = useState('');
+  const [sort, setSort] = useState({ key: null, dir: 1 }); // key: 'company' | 'status' | deliverable id
+  const toggleSort = key => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 });
 
   // Notes is always the last, non-draggable column
   const notesCol = deliverables.find(isNotesCol);
@@ -513,7 +533,25 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
   const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   const confirmed = sponsors.filter(s => s.status === 'confirmed').sort(byName);
   const probable = sponsors.filter(s => s.status === 'probable').sort(byName);
-  const allSponsors = [...confirmed, ...probable];
+
+  // Default order = Confirmed (A–Z) then Probable (A–Z); a header click overrides it
+  let allSponsors = [...confirmed, ...probable];
+  if (sort.key) {
+    const col = (sort.key !== 'company' && sort.key !== 'status') ? deliverables.find(d => d.id === sort.key) : null;
+    const valueOf = (s) => {
+      if (sort.key === 'company') return s.name;
+      if (sort.key === 'status') return s.status;
+      const cell = matrix[s.id]?.[sort.key] || {};
+      if (col && isNotesCol(col)) {
+        const n = cell.notes;
+        return typeof n === 'string' ? n : Array.isArray(n) ? n.join(' ') : (n?.text || '');
+      }
+      if (col && col.col_type && col.col_type !== 'checkbox') return cell.value;
+      return cell.checked ? 1 : 0; // checkbox columns: checked first
+    };
+    const money = !!(col && (col.col_type === 'currency' || col.col_type === 'number'));
+    allSponsors = [...sponsors].sort((a, b) => cmpVals(valueOf(a), valueOf(b), money) * sort.dir);
+  }
 
   return (
     <div style={{ padding: 24, overflowX: 'auto' }}>
@@ -542,8 +580,12 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
       <table className="del-table">
         <thead>
           <tr>
-            <th style={{ minWidth: 160 }}>Company</th>
-            <th style={{ minWidth: 80 }}>Status</th>
+            <th style={{ minWidth: 160, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('company')} title="Click to sort">
+              Company{sortArrow(sort.key === 'company', sort.dir)}
+            </th>
+            <th style={{ minWidth: 80, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('status')} title="Click to sort">
+              Status{sortArrow(sort.key === 'status', sort.dir)}
+            </th>
             {cols.map(d => (
               <th key={d.id} style={{ minWidth: 130, cursor: editingColId === d.id ? 'default' : 'move', opacity: dragColId === d.id ? 0.4 : 1, outline: overColId === d.id ? '2px dashed rgba(255,255,255,0.7)' : 'none', outlineOffset: -2 }}
                 draggable={editingColId !== d.id}
@@ -568,6 +610,10 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
                         <span onDoubleClick={() => { setEditingColId(d.id); setEditColName(d.name); }}
                           style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
                       )}
+                    </span>
+                    <span style={{ cursor: 'pointer', opacity: sort.key === d.id ? 1 : 0.55, fontSize: 11 }}
+                      onClick={e => { e.stopPropagation(); toggleSort(d.id); }} title="Sort by this column">
+                      {sort.key === d.id ? (sort.dir === 1 ? '▲' : '▼') : '↕'}
                     </span>
                     <span style={{ cursor: 'pointer', opacity: 0.6, fontSize: 11 }}
                       onClick={() => handleDeleteCol(d.id)} title="Delete column">✕</span>
@@ -710,13 +756,33 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
+function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table' }) {
   const fileRef = useRef(null);
   const [importing, setImporting] = useState(false);
+  const [sort, setSort] = useState({ key: null, dir: 1 });
+
+  const toggleSort = key => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 });
+  const displayRows = sort.key
+    ? [...rows].sort((a, b) => cmpVals(a.data?.[sort.key], b.data?.[sort.key], cols.find(c => c.key === sort.key)?.money) * sort.dir)
+    : rows;
 
   const addRow = async () => {
     const r = await api.post('/exhibits', { tab_id: tabId, data: {} });
     setRows(prev => [...prev, r.data]);
+  };
+
+  const exportFile = async () => {
+    const XLSX = await import('xlsx');
+    const data = rows.map(r => {
+      const o = {};
+      for (const c of cols) o[c.label] = r.data?.[c.key] ?? '';
+      return o;
+    });
+    const ws = XLSX.utils.json_to_sheet(data, { header: cols.map(c => c.label) });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const safe = String(title).replace(/[^a-z0-9_-]+/gi, '_') || 'table';
+    XLSX.writeFile(wb, `${safe}.xlsx`);
   };
 
   const saveCell = async (rowId, key, value) => {
@@ -767,6 +833,9 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
     <div style={{ padding: 24, overflowX: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
+        <button className="btn btn-ghost btn-sm" disabled={!rows.length} onClick={exportFile} title="Download as Excel">
+          ⬇ Download Excel
+        </button>
         <button className="btn btn-ghost btn-sm" disabled={importing} onClick={() => fileRef.current?.click()}>
           {importing ? 'Importing…' : '⬆ Upload Excel/CSV'}
         </button>
@@ -776,12 +845,17 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
       <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
-            {cols.map(c => <th key={c.key} style={{ minWidth: c.w, whiteSpace: 'nowrap' }}>{c.label}</th>)}
+            {cols.map(c => (
+              <th key={c.key} onClick={() => toggleSort(c.key)} title="Click to sort"
+                style={{ minWidth: c.w, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
+                {c.label}{sortArrow(sort.key === c.key, sort.dir)}
+              </th>
+            ))}
             <th style={{ width: 36 }}></th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {displayRows.map((row, i) => (
             <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9' }}>
               {cols.map(c => (
                 <td key={c.key} style={{ padding: 2 }}>
@@ -1158,6 +1232,7 @@ export default function MainPage() {
               tabId={activeTabId}
               cols={TABLE_COLS[activeTab.type]}
               noun={activeTab.type === 'sponsorlist' ? 'sponsor' : 'exhibitor'}
+              title={activeTab.name}
             />
       )}
     </div>
