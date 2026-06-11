@@ -739,6 +739,7 @@ const SPONSOR_COLS = [
   { key: 'received', label: 'Amount Received ($)', w: 140, money: true, aliases: ['amountreceived', 'received', 'paid', 'amtreceived'] },
   { key: 'status', label: 'Confirmed/Pending', w: 124, status: true, aliases: ['confirmedpending', 'status', 'confirmed', 'pending', 'confirmation'] },
   { key: 'aapi', label: 'AAPI Contact Person', w: 160, aliases: ['aapicontactperson', 'aapicontact', 'aapi', 'aapiperson', 'assignedto'] },
+  { key: 'notes', label: 'Notes', w: 200, aliases: ['notes', 'remarks', 'comments', 'comment'] },
 ];
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS };
 const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
