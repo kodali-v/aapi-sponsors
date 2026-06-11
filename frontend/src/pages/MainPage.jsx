@@ -309,6 +309,14 @@ function normalizeNotesText(raw) {
 function NotesCell({ value, onSave }) {
   const [text, setText] = useState(normalizeNotesText(value));
   const ref = useRef(null);
+  const firstRun = useRef(true);
+
+  // Debounced auto-save so entries persist between background refreshes (not only on blur)
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const id = setTimeout(() => onSave(text), 1200);
+    return () => clearTimeout(id);
+  }, [text]);
 
   const addBullet = () => {
     const ta = ref.current;
@@ -371,7 +379,15 @@ function formatCurrency(v) {
 function TypedCell({ type, value, onSave }) {
   const [val, setVal] = useState(value ?? '');
   const [editing, setEditing] = useState(false);
+  const firstRun = useRef(true);
   const commit = () => { setEditing(false); if (val !== (value ?? '')) onSave(val); };
+
+  // Debounced auto-save so entries persist between background refreshes
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const id = setTimeout(() => { if (val !== (value ?? '')) onSave(val); }, 1200);
+    return () => clearTimeout(id);
+  }, [val]);
 
   if (type === 'currency') {
     return editing ? (
@@ -774,6 +790,28 @@ export default function MainPage() {
         .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(console.error);
     }
   }, [activeTabId, tabs]);
+
+  // Background auto-refresh every 15s so edits from other people show up.
+  // In-progress typing is safe: NotesCell/TypedCell keep their own local state and
+  // ignore prop changes while you edit, and they auto-save before the next refresh.
+  useEffect(() => {
+    if (!user) return;
+    const id = setInterval(() => {
+      if (document.hidden) return; // skip while tab not visible
+      api.get('/sponsors').then(r => setSponsors(r.data)).catch(() => {});
+      api.get('/tabs').then(r => setTabs(r.data)).catch(() => {});
+      if (!activeTabId) return;
+      const t = tabs.find(x => x.id === activeTabId);
+      if (t?.type === 'schedule') {
+        api.get(`/schedule?tab_id=${activeTabId}`)
+          .then(r => setScheduleByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(() => {});
+      } else if (t?.type === 'deliverables') {
+        api.get(`/deliverables?tab_id=${activeTabId}`)
+          .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(() => {});
+      }
+    }, 15000);
+    return () => clearInterval(id);
+  }, [user, activeTabId, tabs]);
 
   // Per-tab state setters that behave like useState updaters for the active tab
   const setActiveSchedule = (updater) =>
