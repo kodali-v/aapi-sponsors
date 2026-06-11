@@ -31,13 +31,14 @@ router.post('/', auth, async (req, res) => {
 
 // Bulk import (from Excel/CSV upload) — must be before /:id
 router.post('/bulk', auth, async (req, res) => {
-  const { tab_id, rows } = req.body;
+  const { tab_id, rows, replace } = req.body;
   if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows must be an array' });
   const client = await pool.connect();
   const inserted = [];
   try {
     await client.query('BEGIN');
-    let max = (await client.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null])).rows[0].m;
+    if (replace && tab_id) await client.query('DELETE FROM exhibit_rows WHERE tab_id=$1', [tab_id]);
+    let max = replace ? 0 : (await client.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null])).rows[0].m;
     for (const data of rows) {
       max += 1;
       const r = await client.query(

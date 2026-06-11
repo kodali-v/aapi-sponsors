@@ -744,9 +744,17 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row' }) {
       const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       const mapped = json.map(r => mapExcelRow(r, cols)).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
       if (!mapped.length) { alert('No data rows found. Make sure the first row has column headers.'); return; }
-      const res = await api.post('/exhibits/bulk', { tab_id: tabId, rows: mapped });
-      setRows(prev => [...prev, ...res.data]);
-      alert(`Imported ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
+      let replace = false;
+      if (rows.length > 0) {
+        replace = window.confirm(
+          `This tab already has ${rows.length} row${rows.length === 1 ? '' : 's'}.\n\n` +
+          `OK  = REPLACE them with the ${mapped.length} imported row${mapped.length === 1 ? '' : 's'}\n` +
+          `Cancel = ADD the imported rows to the existing ones`
+        );
+      }
+      const res = await api.post('/exhibits/bulk', { tab_id: tabId, rows: mapped, replace });
+      setRows(prev => replace ? res.data : [...prev, ...res.data]);
+      alert(`${replace ? 'Replaced with' : 'Imported'} ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
     } catch (err) {
       alert('Could not read that file. Please upload a .xlsx or .csv with column headers in the first row.');
     } finally {
