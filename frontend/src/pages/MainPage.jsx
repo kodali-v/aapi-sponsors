@@ -367,11 +367,11 @@ function NotesCell({ value, onSave }) {
   );
 }
 
-// Format a numeric string as USD currency (leaves non-numbers untouched)
+// Format a numeric string as USD currency (strips $ and commas; leaves true non-numbers untouched)
 function formatCurrency(v) {
   if (v === '' || v === null || v === undefined) return '';
-  const n = Number(v);
-  if (Number.isNaN(n)) return v;
+  const n = Number(String(v).replace(/[^0-9.-]/g, ''));
+  if (Number.isNaN(n)) return String(v);
   return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 }
 
@@ -673,16 +673,16 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
 
 // ── Exhibits Tab ──────────────────────────────────────────
 const EXHIBIT_COLS = [
-  { key: 'booth', label: 'Booth #' },
-  { key: 'company', label: 'Company Name' },
-  { key: 'price', label: 'Price' },
-  { key: 'paid', label: 'Paid' },
-  { key: 'size', label: 'Size' },
-  { key: 'contact', label: 'Pcontact name' },
-  { key: 'cell', label: 'Cell' },
-  { key: 'email', label: 'Email' },
-  { key: 'remarks', label: 'Remarks' },
-  { key: 'status', label: 'Confirmed/Pending' },
+  { key: 'booth', label: 'Booth #', w: 64 },
+  { key: 'company', label: 'Company Name', w: 150 },
+  { key: 'price', label: 'Price', w: 92, money: true },
+  { key: 'paid', label: 'Paid', w: 92, money: true },
+  { key: 'size', label: 'Size', w: 72 },
+  { key: 'contact', label: 'Contact name', w: 130 },
+  { key: 'cell', label: 'Cell', w: 110 },
+  { key: 'email', label: 'Email', w: 170 },
+  { key: 'remarks', label: 'Remarks', w: 180 },
+  { key: 'status', label: 'Confirmed/Pending', w: 124 },
 ];
 const EXHIBIT_ALIASES = {
   booth: ['booth', 'booth#', 'boothnumber', 'boothno'],
@@ -766,18 +766,18 @@ function ExhibitsTab({ rows, setRows, tabId }) {
         <button className="btn btn-navy btn-sm" onClick={addRow}>+ Add Row</button>
       </div>
 
-      <table className="del-table">
+      <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
-            {EXHIBIT_COLS.map(c => <th key={c.key} style={{ minWidth: c.key === 'remarks' ? 180 : 110 }}>{c.label}</th>)}
-            <th style={{ width: 40 }}></th>
+            {EXHIBIT_COLS.map(c => <th key={c.key} style={{ width: c.w, minWidth: c.w, whiteSpace: 'nowrap' }}>{c.label}</th>)}
+            <th style={{ width: 36 }}></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9' }}>
               {EXHIBIT_COLS.map(c => (
-                <td key={c.key} style={{ padding: 4 }}>
+                <td key={c.key} style={{ padding: 2 }}>
                   {c.key === 'status' ? (
                     <select className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
                       value={row.data?.status || ''}
@@ -787,7 +787,7 @@ function ExhibitsTab({ rows, setRows, tabId }) {
                       <option value="Pending">Pending</option>
                     </select>
                   ) : (
-                    <ExhibitCell value={row.data?.[c.key] || ''} onSave={v => saveCell(row.id, c.key, v)} />
+                    <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} onSave={v => saveCell(row.id, c.key, v)} />
                   )}
                 </td>
               ))}
@@ -810,8 +810,25 @@ function ExhibitsTab({ rows, setRows, tabId }) {
 }
 
 // One editable exhibit cell (keeps local state so background refresh won't clobber typing)
-function ExhibitCell({ value, onSave }) {
+function ExhibitCell({ value, onSave, money }) {
   const [val, setVal] = useState(value ?? '');
+  const [editing, setEditing] = useState(false);
+
+  if (money) {
+    const commit = () => { setEditing(false); if (val !== (value ?? '')) onSave(val); };
+    return editing ? (
+      <input className="note-input" autoFocus inputMode="decimal"
+        style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+        value={val} placeholder="$"
+        onChange={e => setVal(e.target.value)} onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(value ?? ''); setEditing(false); } }} />
+    ) : (
+      <div onClick={() => setEditing(true)}
+        style={{ cursor: 'text', minHeight: 26, padding: '4px 6px', textAlign: 'right', color: val === '' ? '#a0aec0' : '#1a202c' }}>
+        {val === '' ? '—' : formatCurrency(val)}
+      </div>
+    );
+  }
   return (
     <input className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
       value={val} placeholder="—"
