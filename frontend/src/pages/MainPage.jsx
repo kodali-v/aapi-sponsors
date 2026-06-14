@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { api, useAuth } from '../App';
 
 // ── Sponsors Panel ────────────────────────────────────────
@@ -757,7 +758,7 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table' }) {
+function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync }) {
   const fileRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [sort, setSort] = useState({ key: null, dir: 1 });
@@ -772,8 +773,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table' })
     setRows(prev => [...prev, r.data]);
   };
 
-  const exportFile = async () => {
-    const XLSX = await import('xlsx');
+  const exportFile = () => {
     const data = rows.map(r => {
       const o = {};
       for (const c of cols) o[c.label] = r.data?.[c.key] ?? '';
@@ -813,7 +813,6 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table' })
     if (!file) return;
     setImporting(true);
     try {
-      const XLSX = await import('xlsx');
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -843,6 +842,12 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table' })
     <div style={{ padding: 24, overflowX: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
+        {onSync && (
+          <button className="btn btn-ghost btn-sm" disabled={!rows.length} onClick={() => onSync(rows)}
+            title="Add these companies to the shared sponsor pool used by Deliverables & Product Theatre">
+            🔗 Sync to Deliverables
+          </button>
+        )}
         <button className="btn btn-ghost btn-sm" disabled={!rows.length} onClick={exportFile} title="Download as Excel">
           ⬇ Download Excel
         </button>
@@ -1101,6 +1106,20 @@ export default function MainPage() {
   const setActiveExhibits = (updater) =>
     setExhibitsByTab(prev => ({ ...prev, [activeTabId]: typeof updater === 'function' ? updater(prev[activeTabId] || []) : updater }));
 
+  // Push companies from a Sponsors table into the shared sponsor pool (used by Deliverables & Product Theatre)
+  const handleSyncSponsors = async (tableRows) => {
+    const payload = tableRows
+      .map(r => ({
+        name: (r.data?.company || '').trim(),
+        status: String(r.data?.status || '').toLowerCase() === 'confirmed' ? 'confirmed' : 'probable',
+      }))
+      .filter(s => s.name);
+    if (!payload.length) { alert('No company names found to sync.'); return; }
+    const r = await api.post('/sponsors/sync', { sponsors: payload });
+    setSponsors(r.data.sponsors);
+    alert(`Synced to Deliverables: ${r.data.added} added, ${r.data.updated} updated.`);
+  };
+
   // Sponsors are a global pool shared across every tab
   const handleAddSponsor = async (name, status) => {
     const r = await api.post('/sponsors', { name, status });
@@ -1243,6 +1262,7 @@ export default function MainPage() {
               cols={TABLE_COLS[activeTab.type]}
               noun={activeTab.type === 'sponsorlist' ? 'sponsor' : 'exhibitor'}
               title={activeTab.name}
+              onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
             />
       )}
     </div>
