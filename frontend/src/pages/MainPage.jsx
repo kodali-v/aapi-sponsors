@@ -782,8 +782,17 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table' })
     const ws = XLSX.utils.json_to_sheet(data, { header: cols.map(c => c.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    // Build a real Blob and download via an anchor (reliable after the async import)
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const safe = String(title).replace(/[^a-z0-9_-]+/gi, '_') || 'table';
-    XLSX.writeFile(wb, `${safe}.xlsx`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safe}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
   };
 
   const saveCell = async (rowId, key, value) => {
