@@ -181,7 +181,7 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
   };
 
   return (
-    <div style={{ display: 'flex', gap: 20, padding: 24, overflow: 'auto', alignItems: 'flex-start' }}>
+    <div className="boardscroll" style={{ display: 'flex', gap: 20, padding: 24, alignItems: 'flex-start' }}>
       {/* Sponsors sidebar */}
       <SponsorsPanel
         sponsors={sponsors}
@@ -555,7 +555,7 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
   }
 
   return (
-    <div style={{ padding: 24, overflowX: 'auto' }}>
+    <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         {addingCol ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -578,6 +578,7 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
         )}
       </div>
 
+      <div className="tablewrap">
       <table className="del-table">
         <thead>
           <tr>
@@ -708,6 +709,7 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
           ))}
         </tbody>
       </table>
+      </div>
 
       {allSponsors.length === 0 && (
         <div style={{ textAlign: 'center', color: '#a0aec0', padding: 40 }}>
@@ -839,7 +841,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
   };
 
   return (
-    <div style={{ padding: 24, overflowX: 'auto' }}>
+    <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
         {onSync && (
@@ -857,6 +859,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
         <button className="btn btn-navy btn-sm" onClick={addRow}>+ Add Row</button>
       </div>
 
+      <div className="tablewrap">
       <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
@@ -895,6 +898,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
           ))}
         </tbody>
       </table>
+      </div>
 
       {rows.length === 0 && (
         <div style={{ textAlign: 'center', color: '#a0aec0', padding: 40 }}>

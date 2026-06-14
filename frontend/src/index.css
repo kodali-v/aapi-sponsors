@@ -84,6 +84,23 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: #1a202c; 
 .sponsor-chip.dragging { opacity: 0.4; }
 
 /* Deliverables table */
+/* Scroll box for wide tables: sticky header + always-reachable, prominent scrollbars */
+.tablewrap { overflow: auto; max-height: calc(100vh - 180px); border: 1px solid var(--border); border-radius: 8px; }
+.tablewrap table { margin: 0; }
+.tablewrap thead th { position: sticky; top: 0; z-index: 3; }
+.tablewrap::-webkit-scrollbar { height: 14px; width: 14px; }
+.tablewrap::-webkit-scrollbar-track { background: #eef2f7; }
+.tablewrap::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 8px; border: 3px solid #eef2f7; background-clip: content-box; }
+.tablewrap::-webkit-scrollbar-thumb:hover { background: #64748b; background-clip: content-box; }
+.tablewrap { scrollbar-width: auto; scrollbar-color: #94a3b8 #eef2f7; }
+
+/* Horizontal scroll for the schedule board */
+.boardscroll { overflow: auto; max-height: calc(100vh - 150px); }
+.boardscroll::-webkit-scrollbar { height: 14px; width: 14px; }
+.boardscroll::-webkit-scrollbar-track { background: #eef2f7; }
+.boardscroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 8px; border: 3px solid #eef2f7; background-clip: content-box; }
+.boardscroll { scrollbar-width: auto; scrollbar-color: #94a3b8 #eef2f7; }
+
 .del-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .del-table th { background: var(--navy); color: white; padding: 10px 12px;
   text-align: left; font-weight: 600; white-space: nowrap; }
