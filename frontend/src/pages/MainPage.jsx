@@ -778,10 +778,27 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
   const exportFile = () => {
     const data = rows.map(r => {
       const o = {};
-      for (const c of cols) o[c.label] = r.data?.[c.key] ?? '';
+      for (const c of cols) {
+        const raw = r.data?.[c.key] ?? '';
+        if (c.money) {
+          const n = Number(String(raw).replace(/[^0-9.-]/g, ''));
+          o[c.label] = (raw === '' || Number.isNaN(n)) ? '' : n; // real number; non-numeric -> blank
+        } else {
+          o[c.label] = raw;
+        }
+      }
       return o;
     });
     const ws = XLSX.utils.json_to_sheet(data, { header: cols.map(c => c.label) });
+    // Give money columns a currency number format so Excel shows $ and SUM totals them
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    cols.forEach((c, ci) => {
+      if (!c.money) return;
+      for (let R = 1; R <= range.e.r; R++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: ci })];
+        if (cell && cell.t === 'n') cell.z = '$#,##0.00';
+      }
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     // Build a real Blob and download via an anchor (reliable after the async import)
