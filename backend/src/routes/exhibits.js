@@ -57,12 +57,17 @@ router.post('/bulk', auth, async (req, res) => {
   res.json(inserted);
 });
 
-// Update a row's data
+// Update a row: data and/or struck (only provided fields change)
 router.put('/:id', auth, async (req, res) => {
-  const { data } = req.body;
+  const { data, struck } = req.body;
   const r = await pool.query(
-    'UPDATE exhibit_rows SET data=$1 WHERE id=$2 RETURNING *',
-    [JSON.stringify(data || {}), req.params.id]
+    `UPDATE exhibit_rows
+       SET data   = COALESCE($1::jsonb, data),
+           struck = COALESCE($2, struck)
+     WHERE id=$3 RETURNING *`,
+    [data !== undefined ? JSON.stringify(data) : null,
+     typeof struck === 'boolean' ? struck : null,
+     req.params.id]
   );
   res.json(r.rows[0]);
 });

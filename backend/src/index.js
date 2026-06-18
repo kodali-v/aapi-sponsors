@@ -14,6 +14,7 @@ app.use('/api/sponsors', require('./routes/sponsors'));
 app.use('/api/schedule', require('./routes/schedule'));
 app.use('/api/deliverables', require('./routes/deliverables'));
 app.use('/api/exhibits', require('./routes/exhibits'));
+app.use('/api/public', require('./routes/public'));
 
 const PORT = process.env.PORT || 4000;
 initDB().then(() => app.listen(PORT, () => console.log(`Backend on :${PORT}`))).catch(e => { console.error(e); process.exit(1); });

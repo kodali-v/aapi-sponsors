@@ -744,7 +744,7 @@ const SPONSOR_COLS = [
   { key: 'aapi', label: 'AAPI Contact Person', w: 160, aliases: ['aapicontactperson', 'aapicontact', 'aapi', 'aapiperson', 'assignedto'] },
   { key: 'notes', label: 'Notes', w: 200, aliases: ['notes', 'remarks', 'comments', 'comment'] },
 ];
-const SOUVENIR_COLS = [
+export const SOUVENIR_COLS = [
   { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
   { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
   { key: 'email', label: 'EMAIL', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
@@ -770,7 +770,7 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync }) {
+export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false }) {
   const fileRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [sort, setSort] = useState({ key: null, dir: 1 });
@@ -781,7 +781,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
     : rows;
 
   const addRow = async () => {
-    const r = await api.post('/exhibits', { tab_id: tabId, data: {} });
+    const r = await api.post(apiBase, { tab_id: tabId, data: {} });
     setRows(prev => [...prev, r.data]);
   };
 
@@ -828,13 +828,21 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
     const row = rows.find(x => x.id === rowId);
     const data = { ...(row?.data || {}), [key]: value };
     setRows(prev => prev.map(x => x.id === rowId ? { ...x, data } : x));
-    try { await api.put(`/exhibits/${rowId}`, { data }); } catch { /* keep optimistic value */ }
+    try { await api.put(`${apiBase}/${rowId}`, { data }); } catch { /* keep optimistic value */ }
   };
 
   const deleteRow = async (rowId) => {
+    if (strikeDelete) {
+      // Don't remove — toggle strike-through (kept visible)
+      const row = rows.find(x => x.id === rowId);
+      const next = !row?.struck;
+      setRows(prev => prev.map(x => x.id === rowId ? { ...x, struck: next } : x));
+      try { await api.put(`${apiBase}/${rowId}`, { struck: next }); } catch {}
+      return;
+    }
     if (!window.confirm('Delete this row?')) return;
     setRows(prev => prev.filter(x => x.id !== rowId));
-    try { await api.delete(`/exhibits/${rowId}`); } catch {}
+    try { await api.delete(`${apiBase}/${rowId}`); } catch {}
   };
 
   const onFile = async (e) => {
@@ -856,7 +864,7 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
           `Cancel = ADD the imported rows to the existing ones`
         );
       }
-      const res = await api.post('/exhibits/bulk', { tab_id: tabId, rows: mapped, replace });
+      const res = await api.post(`${apiBase}/bulk`, { tab_id: tabId, rows: mapped, replace });
       setRows(prev => replace ? res.data : [...prev, ...res.data]);
       alert(`${replace ? 'Replaced with' : 'Imported'} ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
     } catch (err) {
@@ -901,7 +909,9 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
         </thead>
         <tbody>
           {displayRows.map((row, i) => (
-            <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9' }}>
+            <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9',
+              textDecoration: row.struck ? 'line-through' : 'none',
+              opacity: row.struck ? 0.55 : 1 }}>
               {cols.map(c => (
                 <td key={c.key} style={{ padding: 2 }}>
                   {(c.options || c.status) ? (() => {
@@ -921,8 +931,9 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
                 </td>
               ))}
               <td style={{ textAlign: 'center' }}>
-                <span style={{ cursor: 'pointer', color: '#dc2626', fontSize: 12 }} title="Delete row"
-                  onClick={() => deleteRow(row.id)}>✕</span>
+                <span style={{ cursor: 'pointer', color: row.struck ? '#059669' : '#dc2626', fontSize: 12 }}
+                  title={strikeDelete ? (row.struck ? 'Restore (un-strike)' : 'Strike out (keeps the row)') : 'Delete row'}
+                  onClick={() => deleteRow(row.id)}>{strikeDelete ? (row.struck ? '↺' : '⊘') : '✕'}</span>
               </td>
             </tr>
           ))}
@@ -1362,6 +1373,7 @@ export default function MainPage() {
               noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'souvenir' ? 'ad' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
+              strikeDelete={activeTab.type === 'souvenir'}
             />
       )}
     </div>

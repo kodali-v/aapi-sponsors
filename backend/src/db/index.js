@@ -97,6 +97,9 @@ const initDB = async () => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      -- Strike-through instead of delete (kept visible, crossed out)
+      ALTER TABLE exhibit_rows ADD COLUMN IF NOT EXISTS struck BOOLEAN DEFAULT FALSE;
+
       -- Soft-delete (Trash): deleted tabs keep their rows and are restorable for 30 days
       ALTER TABLE tabs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
       DELETE FROM tabs WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '30 days';
