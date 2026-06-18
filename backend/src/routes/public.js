@@ -40,10 +40,10 @@ router.get('/souvenir', async (req, res) => {
 router.post('/souvenir', async (req, res) => {
   const { tab_id, data } = req.body;
   if (!(await isSouvenirTab(tab_id))) return res.status(403).json({ error: 'Not a souvenir tab' });
-  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id]);
+  const min = await pool.query('SELECT COALESCE(MIN(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id]);
   const r = await pool.query(
     'INSERT INTO exhibit_rows (tab_id, data, sort_order) VALUES ($1,$2,$3) RETURNING *',
-    [tab_id, JSON.stringify(data || {}), max.rows[0].m + 1]
+    [tab_id, JSON.stringify(data || {}), min.rows[0].m - 1]
   );
   res.json(r.rows[0]);
 });

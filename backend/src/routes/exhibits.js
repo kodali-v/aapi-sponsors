@@ -18,13 +18,13 @@ router.get('/', auth, async (req, res) => {
   res.json(r.rows);
 });
 
-// Add one row
+// Add one row (goes to the TOP so it's easy to find)
 router.post('/', auth, async (req, res) => {
   const { tab_id, data } = req.body;
-  const max = await pool.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null]);
+  const min = await pool.query('SELECT COALESCE(MIN(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null]);
   const r = await pool.query(
     'INSERT INTO exhibit_rows (tab_id, data, sort_order) VALUES ($1,$2,$3) RETURNING *',
-    [tab_id || null, JSON.stringify(data || {}), max.rows[0].m + 1]
+    [tab_id || null, JSON.stringify(data || {}), min.rows[0].m - 1]
   );
   res.json(r.rows[0]);
 });

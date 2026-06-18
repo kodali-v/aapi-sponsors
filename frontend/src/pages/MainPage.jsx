@@ -790,6 +790,7 @@ function mapExcelRow(raw, cols) {
 
 export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false }) {
   const fileRef = useRef(null);
+  const wrapRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [sort, setSort] = useState({ key: null, dir: 1 });
 
@@ -800,7 +801,9 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
 
   const addRow = async () => {
     const r = await api.post(apiBase, { tab_id: tabId, data: {} });
-    setRows(prev => [...prev, r.data]);
+    setRows(prev => [r.data, ...prev]); // new row at the top
+    setSort({ key: null, dir: 1 });     // clear any sort so it stays on top
+    requestAnimationFrame(() => { if (wrapRef.current) wrapRef.current.scrollTop = 0; });
   };
 
   const exportFile = () => {
@@ -930,7 +933,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
         <button className="btn btn-navy btn-sm" onClick={addRow}>+ Add Row</button>
       </div>
 
-      <div className="tablewrap">
+      <div className="tablewrap" ref={wrapRef}>
       <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
