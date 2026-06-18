@@ -958,7 +958,10 @@ function ExhibitCell({ value, onSave, money }) {
 }
 
 // ── Tab Bar (add / rename / delete / reorder tabs) ────────
-function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder }) {
+const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : '📅';
+const TAB_UNIT = t => t.type === 'schedule' ? 'day' : t.type === 'deliverables' ? 'column' : 'row';
+
+function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, trash = [], onRestore, onPurge }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('schedule');
@@ -966,6 +969,17 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
   const [editName, setEditName] = useState('');
   const [dragId, setDragId] = useState(null);
   const [overId, setOverId] = useState(null);
+  const [showTrash, setShowTrash] = useState(false);
+
+  const confirmDelete = (t) => {
+    const n = Number(t.item_count || 0);
+    const unit = TAB_UNIT(t);
+    return window.confirm(
+      `Move "${t.name}" to Trash?\n\n` +
+      `It contains ${n} ${unit}${n === 1 ? '' : 's'}.\n` +
+      `You can restore it from Trash for 30 days.`
+    );
+  };
 
   const submitAdd = () => {
     if (!newName.trim()) return;
@@ -1011,10 +1025,10 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
               onKeyDown={e => { if (e.key === 'Enter') submitRename(t.id); if (e.key === 'Escape') setEditingId(null); }}
               style={{ font: 'inherit', width: 120, padding: '2px 4px' }} />
           ) : (
-            <span>{t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : '📅'} {t.name}</span>
+            <span>{TAB_ICON(t)} {t.name}</span>
           )}
-          <span style={{ opacity: 0.4, fontSize: 12 }} title="Delete tab"
-            onClick={e => { e.stopPropagation(); if (window.confirm(`Delete tab "${t.name}" and its contents?`)) onDelete(t.id); }}>✕</span>
+          <span style={{ opacity: 0.4, fontSize: 12 }} title="Move to Trash"
+            onClick={e => { e.stopPropagation(); if (confirmDelete(t)) onDelete(t.id); }}>✕</span>
         </div>
       ))}
 
@@ -1037,6 +1051,34 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
       ) : (
         <div className="tab" style={{ cursor: 'pointer', opacity: 0.75 }} onClick={() => setAdding(true)}>+ Add Tab</div>
       )}
+
+      {trash.length > 0 && (
+        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+          <div className="tab" style={{ cursor: 'pointer', opacity: 0.85 }} onClick={() => setShowTrash(v => !v)}>
+            🗑 Trash ({trash.length})
+          </div>
+          {showTrash && (
+            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'white', border: '1px solid #e2e8f0',
+              borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.14)', zIndex: 80, minWidth: 300, padding: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#718096', textTransform: 'uppercase', letterSpacing: 1, padding: '4px 6px 8px' }}>
+                Trash · restorable for 30 days
+              </div>
+              {trash.map(t => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px', borderTop: '1px solid #f1f5f9' }}>
+                  <span style={{ flex: 1, fontSize: 13, color: '#1a202c' }}>
+                    {TAB_ICON(t)} {t.name}
+                    <span style={{ color: '#a0aec0', fontSize: 11 }}> · {Number(t.item_count || 0)} {TAB_UNIT(t)}{Number(t.item_count) === 1 ? '' : 's'}</span>
+                  </span>
+                  <button className="btn btn-navy btn-sm" style={{ padding: '2px 8px' }}
+                    onClick={() => { onRestore(t.id); setShowTrash(false); }}>Restore</button>
+                  <button className="btn btn-danger btn-sm" style={{ padding: '2px 8px' }}
+                    onClick={() => onPurge(t.id)} title="Delete forever">🗑</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1046,6 +1088,7 @@ export default function MainPage() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [tabs, setTabs] = useState([]);
+  const [trash, setTrash] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
   const [sponsors, setSponsors] = useState([]);
   const [scheduleByTab, setScheduleByTab] = useState({}); // tabId -> days[]
@@ -1063,7 +1106,10 @@ export default function MainPage() {
         if (t.data.length) setActiveTabId(t.data[0].id);
       }).catch(console.error)
       .finally(() => setLoading(false));
+    api.get('/tabs/trash').then(r => setTrash(r.data)).catch(() => {});
   }, [user]);
+
+  const refreshTrash = () => api.get('/tabs/trash').then(r => setTrash(r.data)).catch(() => {});
 
   // Lazy-load the active tab's contents on first view
   useEffect(() => {
@@ -1185,7 +1231,7 @@ export default function MainPage() {
     setTabs(prev => prev.map(t => t.id === id ? { ...t, name } : t));
   };
   const handleDeleteTab = async (id) => {
-    await api.delete(`/tabs/${id}`);
+    await api.delete(`/tabs/${id}`); // soft-delete (moves to Trash)
     setTabs(prev => {
       const nt = prev.filter(t => t.id !== id);
       if (activeTabId === id) setActiveTabId(nt[0]?.id || null);
@@ -1194,6 +1240,21 @@ export default function MainPage() {
     setScheduleByTab(p => { const u = { ...p }; delete u[id]; return u; });
     setDelivByTab(p => { const u = { ...p }; delete u[id]; return u; });
     setExhibitsByTab(p => { const u = { ...p }; delete u[id]; return u; });
+    refreshTrash();
+  };
+
+  const handleRestoreTab = async (id) => {
+    await api.post(`/tabs/${id}/restore`);
+    const r = await api.get('/tabs');
+    setTabs(r.data);
+    setActiveTabId(id); // jump to the restored tab
+    refreshTrash();
+  };
+
+  const handlePurgeTab = async (id) => {
+    if (!window.confirm('Permanently delete this tab and all its data? This cannot be undone.')) return;
+    await api.delete(`/tabs/${id}/permanent`);
+    refreshTrash();
   };
   const handleReorderTabs = async (ids) => {
     setTabs(prev => ids.map(id => prev.find(t => t.id === id)).filter(Boolean));
@@ -1234,6 +1295,9 @@ export default function MainPage() {
         onRename={handleRenameTab}
         onDelete={handleDeleteTab}
         onReorder={handleReorderTabs}
+        trash={trash}
+        onRestore={handleRestoreTab}
+        onPurge={handlePurgeTab}
       />
 
       {/* Content */}
