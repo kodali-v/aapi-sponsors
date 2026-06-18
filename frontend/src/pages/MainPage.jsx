@@ -765,8 +765,8 @@ export const VIPADS_COLS = [
   { key: 'package', label: 'Package', w: 120, aliases: ['package', 'pkg', 'level', 'tier'] },
   { key: 'name', label: 'Name (Dr.)', w: 190, aliases: ['namedr', 'name', 'drname', 'doctor', 'physician', 'name(dr.)'] },
   { key: 'adsize', label: 'AD Size', w: 110, options: ['Full', 'Half', 'Quarter'], aliases: ['adsize', 'size', 'ad'] },
-  { key: 'responded', label: 'Responded', w: 110, options: ['Yes', 'No'], aliases: ['responded', 'response', 'replied'] },
-  { key: 'created', label: 'Created?', w: 100, options: ['Yes', 'No'], aliases: ['created', 'created?', 'done', 'ready'] },
+  { key: 'responded', label: 'Client Sent Ad?', w: 130, options: ['Yes', 'No'], aliases: ['clientsentad', 'clientsent', 'sentad', 'adsent', 'responded', 'response'] },
+  { key: 'created', label: 'Created Ad?', w: 120, options: ['Yes', 'No'], aliases: ['createdad', 'created', 'created?', 'done', 'ready'] },
   { key: 'remarks', label: 'Remarks', w: 200, aliases: ['remarks', 'notes', 'comments', 'comment'] },
 ];
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS };
@@ -870,7 +870,25 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
+      // Pick the sheet: auto-match by tab name, else ask which one
+      let sheetName = wb.SheetNames[0];
+      if (wb.SheetNames.length > 1) {
+        const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+        const match = wb.SheetNames.find(n => norm(n) === norm(title));
+        if (match) {
+          sheetName = match;
+        } else {
+          const choice = window.prompt(
+            `This file has ${wb.SheetNames.length} sheets:\n` +
+            wb.SheetNames.map((n, i) => `${i + 1}. ${n}`).join('\n') +
+            `\n\nEnter the number of the sheet to import into "${title}":`, '1');
+          if (choice === null) return;
+          const idx = parseInt(choice, 10) - 1;
+          if (Number.isNaN(idx) || idx < 0 || idx >= wb.SheetNames.length) { alert('Invalid sheet number.'); return; }
+          sheetName = wb.SheetNames[idx];
+        }
+      }
+      const sheet = wb.Sheets[sheetName];
       const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       const mapped = json.map(r => mapExcelRow(r, cols)).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
       if (!mapped.length) { alert('No data rows found. Make sure the first row has column headers.'); return; }
