@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../App';
-import { TableTab, SOUVENIR_COLS } from './MainPage';
+import { TableTab, TABLE_COLS } from './MainPage';
 
 // Public, no-login, editable view of the Souvenir tabs (TOC / VIP Ads).
 // Uses the unauthenticated /public/souvenir endpoints. Delete = strike-through (kept).
@@ -46,7 +46,7 @@ export default function PublicSouvenir() {
           <div className="tabs">
             {tabs.map(t => (
               <div key={t.id} className={`tab${t.id === activeId ? ' active' : ''}`} onClick={() => setActiveId(t.id)}>
-                🎁 {t.name}
+                {t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : '🎁'} {t.name}
               </div>
             ))}
           </div>
@@ -57,8 +57,8 @@ export default function PublicSouvenir() {
               rows={rowsByTab[activeId] || []}
               setRows={setActiveRows}
               tabId={activeId}
-              cols={SOUVENIR_COLS}
-              noun="ad"
+              cols={TABLE_COLS[active.type] || TABLE_COLS.souvenir}
+              noun="row"
               title={active.name}
               apiBase="/public/souvenir"
               strikeDelete

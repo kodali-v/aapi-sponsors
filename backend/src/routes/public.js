@@ -5,22 +5,25 @@ const router = express.Router();
 // NOTE: these endpoints are intentionally UNAUTHENTICATED (shared via a public link).
 // They are strictly limited to rows belonging to souvenir-type, non-deleted tabs.
 
+const SOUVENIR_TYPES = ['souvenir', 'toc', 'vipads'];
+
 const isSouvenirTab = async (tabId) => {
-  const r = await pool.query(`SELECT 1 FROM tabs WHERE id=$1 AND type='souvenir' AND deleted_at IS NULL`, [tabId]);
+  const r = await pool.query(`SELECT 1 FROM tabs WHERE id=$1 AND type = ANY($2) AND deleted_at IS NULL`, [tabId, SOUVENIR_TYPES]);
   return r.rows.length > 0;
 };
 const rowInSouvenir = async (rowId) => {
   const r = await pool.query(
     `SELECT er.id FROM exhibit_rows er
      JOIN tabs t ON t.id = er.tab_id
-     WHERE er.id=$1 AND t.type='souvenir' AND t.deleted_at IS NULL`, [rowId]);
+     WHERE er.id=$1 AND t.type = ANY($2) AND t.deleted_at IS NULL`, [rowId, SOUVENIR_TYPES]);
   return r.rows.length > 0;
 };
 
-// All souvenir tabs + their rows
+// All souvenir-family tabs (Souvenir, TOC, VIP Ads) + their rows
 router.get('/souvenir', async (req, res) => {
   const tabs = await pool.query(
-    `SELECT id, name, type, sort_order FROM tabs WHERE type='souvenir' AND deleted_at IS NULL ORDER BY sort_order, created_at`
+    `SELECT id, name, type, sort_order FROM tabs WHERE type = ANY($1) AND deleted_at IS NULL ORDER BY sort_order, created_at`,
+    [SOUVENIR_TYPES]
   );
   const ids = tabs.rows.map(t => t.id);
   let rowsByTab = {};

@@ -753,8 +753,26 @@ export const SOUVENIR_COLS = [
   { key: 'paid', label: 'Paid ($)', w: 120, money: true, aliases: ['paid', 'paid$', 'amountpaid', 'amtpaid'] },
   { key: 'adreceived', label: 'Ad Received', w: 110, options: ['Yes', 'No'], aliases: ['adreceived', 'adrcvd', 'received', 'adstatus'] },
 ];
-const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS };
-const isTableType = t => t === 'exhibits' || t === 'sponsorlist' || t === 'souvenir';
+export const TOC_COLS = [
+  { key: 'sno', label: 'Sno', w: 60, aliases: ['sno', 'sno.', 'slno', 'sl', 'serial', 'no', '#'] },
+  { key: 'page', label: 'Page', w: 220, aliases: ['page', 'pagename', 'title', 'item'] },
+  { key: 'type', label: 'Type', w: 150, aliases: ['type', 'category'] },
+  { key: 'received', label: 'Received?', w: 110, options: ['Yes', 'No'], aliases: ['received', 'recevied', 'recd', 'received?'] },
+  { key: 'remarks', label: 'Remarks', w: 220, aliases: ['remarks', 'notes', 'comments', 'comment'] },
+];
+export const VIPADS_COLS = [
+  { key: 'sno', label: 'Sno', w: 60, aliases: ['sno', 'sno.', 'slno', 'sl', 'serial', 'no', '#'] },
+  { key: 'package', label: 'Package', w: 120, aliases: ['package', 'pkg', 'level', 'tier'] },
+  { key: 'name', label: 'Name (Dr.)', w: 190, aliases: ['namedr', 'name', 'drname', 'doctor', 'physician', 'name(dr.)'] },
+  { key: 'adsize', label: 'AD Size', w: 110, options: ['Full', 'Half', 'Quarter'], aliases: ['adsize', 'size', 'ad'] },
+  { key: 'responded', label: 'Responded', w: 110, options: ['Yes', 'No'], aliases: ['responded', 'response', 'replied'] },
+  { key: 'created', label: 'Created?', w: 100, options: ['Yes', 'No'], aliases: ['created', 'created?', 'done', 'ready'] },
+  { key: 'remarks', label: 'Remarks', w: 200, aliases: ['remarks', 'notes', 'comments', 'comment'] },
+];
+const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS };
+export { TABLE_COLS };
+const isTableType = t => ['exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads'].includes(t);
+const isSouvenirFamily = t => ['souvenir', 'toc', 'vipads'].includes(t);
 const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Map one parsed spreadsheet row (keyed by its headers) to our column keys
@@ -982,7 +1000,7 @@ function ExhibitCell({ value, onSave, money }) {
 }
 
 // ── Tab Bar (add / rename / delete / reorder tabs) ────────
-const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : '📅';
+const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : '📅';
 const TAB_UNIT = t => t.type === 'schedule' ? 'day' : t.type === 'deliverables' ? 'column' : 'row';
 
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, trash = [], onRestore, onPurge }) {
@@ -1069,6 +1087,8 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
             <option value="exhibits">🏢 Exhibits table</option>
             <option value="sponsorlist">🤝 Sponsors table</option>
             <option value="souvenir">🎁 Souvenir table</option>
+            <option value="toc">📑 TOC table</option>
+            <option value="vipads">⭐ VIP Ads table</option>
           </select>
           <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -1370,10 +1390,10 @@ export default function MainPage() {
               setRows={setActiveExhibits}
               tabId={activeTabId}
               cols={TABLE_COLS[activeTab.type]}
-              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'souvenir' ? 'ad' : 'exhibitor'}
+              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
-              strikeDelete={activeTab.type === 'souvenir'}
+              strikeDelete={isSouvenirFamily(activeTab.type)}
             />
       )}
     </div>
