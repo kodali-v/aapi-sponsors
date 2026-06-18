@@ -744,7 +744,16 @@ const SPONSOR_COLS = [
   { key: 'aapi', label: 'AAPI Contact Person', w: 160, aliases: ['aapicontactperson', 'aapicontact', 'aapi', 'aapiperson', 'assignedto'] },
   { key: 'notes', label: 'Notes', w: 200, aliases: ['notes', 'remarks', 'comments', 'comment'] },
 ];
-const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS };
+const SOUVENIR_COLS = [
+  { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
+  { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
+  { key: 'email', label: 'EMAIL', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
+  { key: 'adsize', label: 'Ad Size', w: 110, aliases: ['adsize', 'size', 'ad', 'page'] },
+  { key: 'amount', label: 'Amt ($)', w: 120, money: true, aliases: ['amt', 'amount', 'amt$', 'sponsorshipamt', 'price', 'cost', 'fee'] },
+  { key: 'paid', label: 'Paid ($)', w: 120, money: true, aliases: ['paid', 'paid$', 'amountpaid', 'received', 'amountreceived'] },
+];
+const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS };
+const isTableType = t => t === 'exhibits' || t === 'sponsorlist' || t === 'souvenir';
 const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Map one parsed spreadsheet row (keyed by its headers) to our column keys
@@ -958,7 +967,7 @@ function ExhibitCell({ value, onSave, money }) {
 }
 
 // ── Tab Bar (add / rename / delete / reorder tabs) ────────
-const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : '📅';
+const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : '📅';
 const TAB_UNIT = t => t.type === 'schedule' ? 'day' : t.type === 'deliverables' ? 'column' : 'row';
 
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, trash = [], onRestore, onPurge }) {
@@ -1044,6 +1053,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
             <option value="deliverables">📋 Deliverables table</option>
             <option value="exhibits">🏢 Exhibits table</option>
             <option value="sponsorlist">🤝 Sponsors table</option>
+            <option value="souvenir">🎁 Souvenir table</option>
           </select>
           <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -1124,7 +1134,7 @@ export default function MainPage() {
       api.get(`/deliverables?tab_id=${activeTabId}`)
         .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(console.error);
     }
-    if ((t.type === 'exhibits' || t.type === 'sponsorlist') && exhibitsByTab[activeTabId] === undefined) {
+    if (isTableType(t.type) && exhibitsByTab[activeTabId] === undefined) {
       api.get(`/exhibits?tab_id=${activeTabId}`)
         .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
     }
@@ -1147,7 +1157,7 @@ export default function MainPage() {
       } else if (t?.type === 'deliverables') {
         api.get(`/deliverables?tab_id=${activeTabId}`)
           .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(() => {});
-      } else if (t?.type === 'exhibits' || t?.type === 'sponsorlist') {
+      } else if (isTableType(t?.type)) {
         api.get(`/exhibits?tab_id=${activeTabId}`)
           .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(() => {});
       }
@@ -1336,7 +1346,7 @@ export default function MainPage() {
             />
       )}
 
-      {(activeTab?.type === 'exhibits' || activeTab?.type === 'sponsorlist') && (
+      {isTableType(activeTab?.type) && (
         exhibitsByTab[activeTabId] === undefined
           ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
           : <TableTab
@@ -1345,7 +1355,7 @@ export default function MainPage() {
               setRows={setActiveExhibits}
               tabId={activeTabId}
               cols={TABLE_COLS[activeTab.type]}
-              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : 'exhibitor'}
+              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'souvenir' ? 'ad' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
             />
