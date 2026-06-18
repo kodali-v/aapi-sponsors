@@ -748,9 +748,10 @@ const SOUVENIR_COLS = [
   { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
   { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
   { key: 'email', label: 'EMAIL', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
-  { key: 'adsize', label: 'Ad Size', w: 110, aliases: ['adsize', 'size', 'ad', 'page'] },
+  { key: 'adsize', label: 'Ad Size', w: 120, options: ['Full Page', 'Half Page', 'Quarter Page'], aliases: ['adsize', 'size', 'ad', 'page'] },
   { key: 'amount', label: 'Amt ($)', w: 120, money: true, aliases: ['amt', 'amount', 'amt$', 'sponsorshipamt', 'price', 'cost', 'fee'] },
-  { key: 'paid', label: 'Paid ($)', w: 120, money: true, aliases: ['paid', 'paid$', 'amountpaid', 'received', 'amountreceived'] },
+  { key: 'paid', label: 'Paid ($)', w: 120, money: true, aliases: ['paid', 'paid$', 'amountpaid', 'amtpaid'] },
+  { key: 'adreceived', label: 'Ad Received', w: 110, options: ['Yes', 'No'], aliases: ['adreceived', 'adrcvd', 'received', 'adstatus'] },
 ];
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS };
 const isTableType = t => t === 'exhibits' || t === 'sponsorlist' || t === 'souvenir';
@@ -903,15 +904,18 @@ function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', o
             <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9' }}>
               {cols.map(c => (
                 <td key={c.key} style={{ padding: 2 }}>
-                  {c.status ? (
-                    <select className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
-                      value={row.data?.[c.key] || ''}
-                      onChange={e => saveCell(row.id, c.key, e.target.value)}>
-                      <option value="">—</option>
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Pending">Pending</option>
-                    </select>
-                  ) : (
+                  {(c.options || c.status) ? (() => {
+                    const opts = c.options || ['Confirmed', 'Pending'];
+                    const cur = row.data?.[c.key] || '';
+                    const list = cur && !opts.includes(cur) ? [cur, ...opts] : opts; // keep unrecognized imported values
+                    return (
+                      <select className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+                        value={cur} onChange={e => saveCell(row.id, c.key, e.target.value)}>
+                        <option value="">—</option>
+                        {list.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    );
+                  })() : (
                     <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} onSave={v => saveCell(row.id, c.key, v)} />
                   )}
                 </td>
