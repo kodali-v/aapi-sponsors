@@ -753,29 +753,29 @@ const STATUS_COLORS = {
 };
 
 export const SOUVENIR_COLS = [
-  STATUS_COL,
   { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
   { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
   { key: 'email', label: 'EMAIL', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
   { key: 'adsize', label: 'Ad Size', w: 120, options: ['Full Page', 'Half Page', 'Quarter Page'], aliases: ['adsize', 'size', 'ad', 'page'] },
+  STATUS_COL,
   { key: 'amount', label: 'Amt ($)', w: 120, money: true, aliases: ['amt', 'amount', 'amt$', 'sponsorshipamt', 'price', 'cost', 'fee'] },
   { key: 'paid', label: 'Paid ($)', w: 120, money: true, aliases: ['paid', 'paid$', 'amountpaid', 'amtpaid'] },
   { key: 'adreceived', label: 'Ad Received', w: 110, options: ['Yes', 'No'], aliases: ['adreceived', 'adrcvd', 'received', 'adstatus'] },
 ];
 export const TOC_COLS = [
-  STATUS_COL,
   { key: 'sno', label: 'Sno', w: 60, aliases: ['sno', 'sno.', 'slno', 'sl', 'serial', 'no', '#'] },
   { key: 'page', label: 'Page', w: 220, aliases: ['page', 'pagename', 'title', 'item'] },
   { key: 'type', label: 'Type', w: 150, aliases: ['type', 'category'] },
+  STATUS_COL,
   { key: 'received', label: 'Received?', w: 110, options: ['Yes', 'No'], aliases: ['received', 'recevied', 'recd', 'received?'] },
   { key: 'remarks', label: 'Remarks', w: 220, aliases: ['remarks', 'notes', 'comments', 'comment'] },
 ];
 export const VIPADS_COLS = [
-  STATUS_COL,
   { key: 'sno', label: 'Sno', w: 60, aliases: ['sno', 'sno.', 'slno', 'sl', 'serial', 'no', '#'] },
   { key: 'package', label: 'Package', w: 120, aliases: ['package', 'pkg', 'level', 'tier'] },
   { key: 'name', label: 'Name (Dr.)', w: 190, aliases: ['namedr', 'name', 'drname', 'doctor', 'physician', 'name(dr.)'] },
   { key: 'adsize', label: 'AD Size', w: 110, options: ['Full', 'Half', 'Quarter'], aliases: ['adsize', 'size', 'ad'] },
+  STATUS_COL,
   { key: 'responded', label: 'Client Sent Ad?', w: 130, options: ['Yes', 'No'], aliases: ['clientsentad', 'clientsent', 'sentad', 'adsent', 'responded', 'response'] },
   { key: 'created', label: 'Created Ad?', w: 120, options: ['Yes', 'No'], aliases: ['createdad', 'created', 'created?', 'done', 'ready'] },
   { key: 'remarks', label: 'Remarks', w: 200, aliases: ['remarks', 'notes', 'comments', 'comment'] },
