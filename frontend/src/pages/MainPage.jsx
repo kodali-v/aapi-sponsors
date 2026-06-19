@@ -793,6 +793,21 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
   const wrapRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [sort, setSort] = useState({ key: null, dir: 1 });
+  const [dragRowId, setDragRowId] = useState(null);
+  const [overRowId, setOverRowId] = useState(null);
+
+  const handleRowDrop = async (targetId) => {
+    if (!dragRowId || dragRowId === targetId) { setDragRowId(null); setOverRowId(null); return; }
+    const ids = rows.map(r => r.id);
+    const from = ids.indexOf(dragRowId), to = ids.indexOf(targetId);
+    setDragRowId(null); setOverRowId(null);
+    if (from < 0 || to < 0) return;
+    const reordered = [...rows];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    setRows(reordered);
+    try { await api.post(`${apiBase}/reorder`, { tab_id: tabId, order: reordered.map(r => r.id) }); } catch { /* keep optimistic order */ }
+  };
 
   const toggleSort = key => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 });
   const displayRows = sort.key
@@ -937,6 +952,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
       <table className="del-table" style={{ width: 'auto' }}>
         <thead>
           <tr>
+            <th style={{ width: 22 }}></th>
             {cols.map(c => (
               <th key={c.key} onClick={() => toggleSort(c.key)} title="Click to sort"
                 style={{ minWidth: c.w, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
@@ -948,9 +964,21 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
         </thead>
         <tbody>
           {displayRows.map((row, i) => (
-            <tr key={row.id} style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9',
-              textDecoration: row.struck ? 'line-through' : 'none',
-              opacity: row.struck ? 0.55 : 1 }}>
+            <tr key={row.id}
+              onDragOver={e => { if (dragRowId && !sort.key) { e.preventDefault(); if (overRowId !== row.id) setOverRowId(row.id); } }}
+              onDrop={() => handleRowDrop(row.id)}
+              style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9',
+                textDecoration: row.struck ? 'line-through' : 'none',
+                opacity: dragRowId === row.id ? 0.4 : (row.struck ? 0.55 : 1),
+                borderTop: overRowId === row.id ? '2px solid #1e3a5f' : undefined }}>
+              <td style={{ textAlign: 'center', padding: 0 }}>
+                <span
+                  draggable={!sort.key}
+                  onDragStart={() => { if (!sort.key) setDragRowId(row.id); }}
+                  onDragEnd={() => { setDragRowId(null); setOverRowId(null); }}
+                  title={sort.key ? 'Clear the column sort to drag rows' : 'Drag to reorder row'}
+                  style={{ cursor: sort.key ? 'not-allowed' : 'grab', color: '#94a3b8', userSelect: 'none', fontSize: 13, display: 'inline-block', padding: '4px 2px' }}>⠿</span>
+              </td>
               {cols.map(c => (
                 <td key={c.key} style={{ padding: 2 }}>
                   {(c.options || c.status) ? (() => {

@@ -57,6 +57,26 @@ router.post('/bulk', auth, async (req, res) => {
   res.json(inserted);
 });
 
+// Reorder rows (must be before /:id)
+router.post('/reorder', auth, async (req, res) => {
+  const { order } = req.body;
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let i = 0; i < order.length; i++) {
+      await client.query('UPDATE exhibit_rows SET sort_order=$1 WHERE id=$2', [i, order[i]]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'reorder failed' });
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+});
+
 // Update a row: data and/or struck (only provided fields change)
 router.put('/:id', auth, async (req, res) => {
   const { data, struck } = req.body;

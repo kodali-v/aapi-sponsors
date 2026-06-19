@@ -75,6 +75,27 @@ router.post('/souvenir/bulk', async (req, res) => {
   res.json(inserted);
 });
 
+// Reorder rows within a souvenir tab (must be before /souvenir/:id)
+router.post('/souvenir/reorder', async (req, res) => {
+  const { tab_id, order } = req.body;
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+  if (!(await isSouvenirTab(tab_id))) return res.status(403).json({ error: 'Not a souvenir tab' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let i = 0; i < order.length; i++) {
+      await client.query('UPDATE exhibit_rows SET sort_order=$1 WHERE id=$2 AND tab_id=$3', [i, order[i], tab_id]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'reorder failed' });
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+});
+
 // Update a row: data and/or struck (souvenir row only)
 router.put('/souvenir/:id', async (req, res) => {
   if (!(await rowInSouvenir(req.params.id))) return res.status(403).json({ error: 'Not a souvenir row' });
