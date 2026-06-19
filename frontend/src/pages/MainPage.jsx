@@ -744,7 +744,16 @@ const SPONSOR_COLS = [
   { key: 'aapi', label: 'AAPI Contact Person', w: 160, aliases: ['aapicontactperson', 'aapicontact', 'aapi', 'aapiperson', 'assignedto'] },
   { key: 'notes', label: 'Notes', w: 200, aliases: ['notes', 'remarks', 'comments', 'comment'] },
 ];
+const STATUS_COL = { key: 'adstatus', label: 'Status', w: 96, options: ['NEW', 'DONE'], aliases: ['status', 'adstatus', 'state', 'workflow'] };
+// Colors for known status values (used by option/status dropdown cells)
+const STATUS_COLORS = {
+  'NEW': { bg: '#fee2e2', color: '#b91c1c' },
+  'IN PROGRESS': { bg: '#fef3c7', color: '#b45309' },
+  'DONE': { bg: '#dcfce7', color: '#15803d' },
+};
+
 export const SOUVENIR_COLS = [
+  STATUS_COL,
   { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
   { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
   { key: 'email', label: 'EMAIL', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
@@ -754,6 +763,7 @@ export const SOUVENIR_COLS = [
   { key: 'adreceived', label: 'Ad Received', w: 110, options: ['Yes', 'No'], aliases: ['adreceived', 'adrcvd', 'received', 'adstatus'] },
 ];
 export const TOC_COLS = [
+  STATUS_COL,
   { key: 'sno', label: 'Sno', w: 60, aliases: ['sno', 'sno.', 'slno', 'sl', 'serial', 'no', '#'] },
   { key: 'page', label: 'Page', w: 220, aliases: ['page', 'pagename', 'title', 'item'] },
   { key: 'type', label: 'Type', w: 150, aliases: ['type', 'category'] },
@@ -761,6 +771,7 @@ export const TOC_COLS = [
   { key: 'remarks', label: 'Remarks', w: 220, aliases: ['remarks', 'notes', 'comments', 'comment'] },
 ];
 export const VIPADS_COLS = [
+  STATUS_COL,
   { key: 'sno', label: 'Sno', w: 60, aliases: ['sno', 'sno.', 'slno', 'sl', 'serial', 'no', '#'] },
   { key: 'package', label: 'Package', w: 120, aliases: ['package', 'pkg', 'level', 'tier'] },
   { key: 'name', label: 'Name (Dr.)', w: 190, aliases: ['namedr', 'name', 'drname', 'doctor', 'physician', 'name(dr.)'] },
@@ -985,8 +996,11 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
                     const opts = c.options || ['Confirmed', 'Pending'];
                     const cur = row.data?.[c.key] || '';
                     const list = cur && !opts.includes(cur) ? [cur, ...opts] : opts; // keep unrecognized imported values
+                    const sc = STATUS_COLORS[String(cur).toUpperCase()];
                     return (
-                      <select className="note-input" style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+                      <select className="note-input"
+                        style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
+                          background: sc ? sc.bg : 'transparent', color: sc ? sc.color : 'inherit', fontWeight: sc ? 700 : 400 }}
                         value={cur} onChange={e => saveCell(row.id, c.key, e.target.value)}>
                         <option value="">—</option>
                         {list.map(o => <option key={o} value={o}>{o}</option>)}
