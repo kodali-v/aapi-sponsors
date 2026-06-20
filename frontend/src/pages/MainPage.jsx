@@ -780,9 +780,28 @@ export const VIPADS_COLS = [
   { key: 'created', label: 'Created Ad?', w: 120, options: ['Yes', 'No'], aliases: ['createdad', 'created', 'created?', 'done', 'ready'] },
   { key: 'remarks', label: 'Remarks', w: 200, aliases: ['remarks', 'notes', 'comments', 'comment'] },
 ];
-const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS };
+export const ROOMING_COLS = [
+  { key: 'sno', label: 'Sno', w: 50, aliases: ['sno', 'sno.', 'sl', 'slno', 'serial', 'no', '#'] },
+  { key: 'package', label: 'Package', w: 110, aliases: ['package', 'pkg'] },
+  { key: 'guests', label: '# of Guests', w: 90, aliases: ['#ofguests', 'guests', 'noofguests', 'numguests', '#guests'] },
+  { key: 'hotel', label: 'Hotel', w: 130, options: ['Tampa Marriott', 'JW Marriott'], aliases: ['hotel'] },
+  { key: 'upgrade', label: 'Upgrade', w: 175, options: ['Waterview Balcony King', 'Waterview Balcony Queen', 'King Suite', 'Luxury Suite', 'JWM Premium View King', 'JWM Premium View Queen'], aliases: ['upgrade', 'roomtype', 'room'] },
+  { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'first', 'fname'] },
+  { key: 'last', label: 'Last Name', w: 110, aliases: ['lastname', 'last', 'lname'] },
+  { key: 'addl', label: 'Additional Guest Names', w: 180, aliases: ['additionalguestnames', 'additionalguests', 'guestnames', 'additional'] },
+  { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
+  { key: 'conf', label: 'Confirmation Number', w: 150, aliases: ['confirmationnumber', 'confirmation', 'confno', 'conf', 'confirmation#'] },
+  { key: 'arr', label: 'Arr Date', w: 100, aliases: ['arrdate', 'arrivaldate', 'arrival', 'arr'] },
+  { key: 'dep', label: 'Dep Date', w: 100, aliases: ['depdate', 'departuredate', 'departure', 'dep'] },
+  { key: 'nights', label: '# Room Nights', w: 100, aliases: ['#roomnights', 'roomnights', 'nights', '#nights'] },
+  { key: 'revarr', label: 'Rev Arr Date', w: 100, aliases: ['revarrdate', 'revarrivaldate', 'revarr'] },
+  { key: 'revdep', label: 'Rev Dep Date', w: 100, aliases: ['revdepdate', 'revdeparturedate', 'revdep'] },
+  { key: 'revnights', label: 'Rev # Room Nights', w: 110, aliases: ['rev#roomnights', 'revroomnights', 'revnights'] },
+  { key: 'remarks', label: 'Remarks', w: 180, aliases: ['remarks', 'notes', 'comments'] },
+];
+const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS };
 export { TABLE_COLS };
-const isTableType = t => ['exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads'].includes(t);
+const isTableType = t => ['exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming'].includes(t);
 const isSouvenirFamily = t => ['souvenir', 'toc', 'vipads'].includes(t);
 const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -1063,7 +1082,7 @@ function ExhibitCell({ value, onSave, money }) {
 }
 
 // ── Tab Bar (add / rename / delete / reorder tabs) ────────
-const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : '📅';
+const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : t.type === 'rooming' ? '🏨' : '📅';
 const TAB_UNIT = t => t.type === 'schedule' ? 'day' : t.type === 'deliverables' ? 'column' : 'row';
 
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, trash = [], onRestore, onPurge }) {
@@ -1152,6 +1171,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
             <option value="souvenir">🎁 Souvenir table</option>
             <option value="toc">📑 TOC table</option>
             <option value="vipads">⭐ VIP Ads table</option>
+            <option value="rooming">🏨 Hotel Rooming List</option>
           </select>
           <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -1453,7 +1473,7 @@ export default function MainPage() {
               setRows={setActiveExhibits}
               tabId={activeTabId}
               cols={TABLE_COLS[activeTab.type]}
-              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
+              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'rooming' ? 'guest' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
               strikeDelete={isSouvenirFamily(activeTab.type)}

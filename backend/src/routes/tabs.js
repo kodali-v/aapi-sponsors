@@ -9,7 +9,7 @@ const auth = (req, res, next) => {
   catch { res.status(401).json({ error: 'Not authenticated' }); }
 };
 
-const VALID_TYPES = ['schedule', 'deliverables', 'exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads'];
+const VALID_TYPES = ['schedule', 'deliverables', 'exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming'];
 
 // item_count per tab: days (schedule), columns (deliverables), or rows (exhibits/sponsorlist)
 const COUNT_SELECT = `
