@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
+const { tabUnlocked, rowTabId } = require('../tabAccess');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 
@@ -9,9 +10,12 @@ const auth = (req, res, next) => {
   catch { res.status(401).json({ error: 'Not authenticated' }); }
 };
 
+const LOCKED = { error: 'locked', message: 'This tab is locked' };
+
 // List rows for an exhibits tab
 router.get('/', auth, async (req, res) => {
   const { tab_id } = req.query;
+  if (!(await tabUnlocked(tab_id, req))) return res.status(403).json(LOCKED);
   const r = tab_id
     ? await pool.query('SELECT * FROM exhibit_rows WHERE tab_id=$1 ORDER BY sort_order, created_at', [tab_id])
     : await pool.query('SELECT * FROM exhibit_rows ORDER BY sort_order, created_at');
@@ -21,6 +25,7 @@ router.get('/', auth, async (req, res) => {
 // Add one row (goes to the TOP so it's easy to find)
 router.post('/', auth, async (req, res) => {
   const { tab_id, data } = req.body;
+  if (!(await tabUnlocked(tab_id, req))) return res.status(403).json(LOCKED);
   const min = await pool.query('SELECT COALESCE(MIN(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null]);
   const r = await pool.query(
     'INSERT INTO exhibit_rows (tab_id, data, sort_order) VALUES ($1,$2,$3) RETURNING *',
@@ -33,6 +38,7 @@ router.post('/', auth, async (req, res) => {
 router.post('/bulk', auth, async (req, res) => {
   const { tab_id, rows, replace } = req.body;
   if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows must be an array' });
+  if (!(await tabUnlocked(tab_id, req))) return res.status(403).json(LOCKED);
   const client = await pool.connect();
   const inserted = [];
   try {
@@ -59,8 +65,9 @@ router.post('/bulk', auth, async (req, res) => {
 
 // Reorder rows (must be before /:id)
 router.post('/reorder', auth, async (req, res) => {
-  const { order } = req.body;
+  const { order, tab_id } = req.body;
   if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+  if (!(await tabUnlocked(tab_id, req))) return res.status(403).json(LOCKED);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -79,6 +86,7 @@ router.post('/reorder', auth, async (req, res) => {
 
 // Update a row: data and/or struck (only provided fields change)
 router.put('/:id', auth, async (req, res) => {
+  if (!(await tabUnlocked(await rowTabId(req.params.id), req))) return res.status(403).json(LOCKED);
   const { data, struck } = req.body;
   const r = await pool.query(
     `UPDATE exhibit_rows
@@ -94,6 +102,7 @@ router.put('/:id', auth, async (req, res) => {
 
 // Delete a row
 router.delete('/:id', auth, async (req, res) => {
+  if (!(await tabUnlocked(await rowTabId(req.params.id), req))) return res.status(403).json(LOCKED);
   await pool.query('DELETE FROM exhibit_rows WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });

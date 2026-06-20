@@ -818,7 +818,8 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false }) {
+export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token }) {
+  const cfg = token ? { headers: { 'x-tab-token': token } } : undefined;
   const fileRef = useRef(null);
   const wrapRef = useRef(null);
   const [importing, setImporting] = useState(false);
@@ -836,7 +837,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     const [moved] = reordered.splice(from, 1);
     reordered.splice(to, 0, moved);
     setRows(reordered);
-    try { await api.post(`${apiBase}/reorder`, { tab_id: tabId, order: reordered.map(r => r.id) }); } catch { /* keep optimistic order */ }
+    try { await api.post(`${apiBase}/reorder`, { tab_id: tabId, order: reordered.map(r => r.id) }, cfg); } catch { /* keep optimistic order */ }
   };
 
   const toggleSort = key => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 });
@@ -845,7 +846,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     : rows;
 
   const addRow = async () => {
-    const r = await api.post(apiBase, { tab_id: tabId, data: {} });
+    const r = await api.post(apiBase, { tab_id: tabId, data: {} }, cfg);
     setRows(prev => [r.data, ...prev]); // new row at the top
     setSort({ key: null, dir: 1 });     // clear any sort so it stays on top
     requestAnimationFrame(() => { if (wrapRef.current) wrapRef.current.scrollTop = 0; });
@@ -894,7 +895,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     const row = rows.find(x => x.id === rowId);
     const data = { ...(row?.data || {}), [key]: value };
     setRows(prev => prev.map(x => x.id === rowId ? { ...x, data } : x));
-    try { await api.put(`${apiBase}/${rowId}`, { data }); } catch { /* keep optimistic value */ }
+    try { await api.put(`${apiBase}/${rowId}`, { data }, cfg); } catch { /* keep optimistic value */ }
   };
 
   const deleteRow = async (rowId) => {
@@ -903,12 +904,12 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
       const row = rows.find(x => x.id === rowId);
       const next = !row?.struck;
       setRows(prev => prev.map(x => x.id === rowId ? { ...x, struck: next } : x));
-      try { await api.put(`${apiBase}/${rowId}`, { struck: next }); } catch {}
+      try { await api.put(`${apiBase}/${rowId}`, { struck: next }, cfg); } catch {}
       return;
     }
     if (!window.confirm('Delete this row?')) return;
     setRows(prev => prev.filter(x => x.id !== rowId));
-    try { await api.delete(`${apiBase}/${rowId}`); } catch {}
+    try { await api.delete(`${apiBase}/${rowId}`, cfg); } catch {}
   };
 
   const onFile = async (e) => {
@@ -948,7 +949,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
           `Cancel = ADD the imported rows to the existing ones`
         );
       }
-      const res = await api.post(`${apiBase}/bulk`, { tab_id: tabId, rows: mapped, replace });
+      const res = await api.post(`${apiBase}/bulk`, { tab_id: tabId, rows: mapped, replace }, cfg);
       setRows(prev => replace ? res.data : [...prev, ...res.data]);
       alert(`${replace ? 'Replaced with' : 'Imported'} ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
     } catch (err) {
@@ -1085,7 +1086,7 @@ function ExhibitCell({ value, onSave, money }) {
 const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : t.type === 'rooming' ? '🏨' : '📅';
 const TAB_UNIT = t => t.type === 'schedule' ? 'day' : t.type === 'deliverables' ? 'column' : 'row';
 
-function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, trash = [], onRestore, onPurge }) {
+function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, onLock, trash = [], onRestore, onPurge }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('schedule');
@@ -1151,6 +1152,9 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
           ) : (
             <span>{TAB_ICON(t)} {t.name}</span>
           )}
+          <span style={{ opacity: t.locked ? 0.9 : 0.35, fontSize: 12 }}
+            title={t.locked ? 'Locked — click to change/remove passcode' : 'Lock this tab with a passcode'}
+            onClick={e => { e.stopPropagation(); onLock(t.id); }}>{t.locked ? '🔒' : '🔓'}</span>
           <span style={{ opacity: 0.4, fontSize: 12 }} title="Move to Trash"
             onClick={e => { e.stopPropagation(); if (confirmDelete(t)) onDelete(t.id); }}>✕</span>
         </div>
@@ -1218,6 +1222,7 @@ export default function MainPage() {
   const [tabs, setTabs] = useState([]);
   const [trash, setTrash] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
+  const [tabTokens, setTabTokens] = useState({}); // tabId -> unlock token (locked tabs)
   const [sponsors, setSponsors] = useState([]);
   const [scheduleByTab, setScheduleByTab] = useState({}); // tabId -> days[]
   const [delivByTab, setDelivByTab] = useState({});       // tabId -> { deliverables, matrix }
@@ -1239,11 +1244,63 @@ export default function MainPage() {
 
   const refreshTrash = () => api.get('/tabs/trash').then(r => setTrash(r.data)).catch(() => {});
 
+  // ── Per-tab passcode lock ──────────────────────────────
+  const tabCfg = id => tabTokens[id] ? { headers: { 'x-tab-token': tabTokens[id] } } : undefined;
+  const tabBlocked = t => !!(t && t.locked && !tabTokens[t.id]);
+
+  const unlockTab = async (id) => {
+    const t = tabs.find(x => x.id === id);
+    if (!t?.locked || tabTokens[id]) return true;
+    const pc = window.prompt(`🔒 "${t.name}" is locked.\nEnter the passcode to open it:`);
+    if (pc === null) return false;
+    try {
+      const r = await api.post(`/tabs/${id}/unlock`, { passcode: pc });
+      setTabTokens(prev => ({ ...prev, [id]: r.data.token }));
+      return true;
+    } catch { alert('Incorrect passcode.'); return false; }
+  };
+
+  const handleSelectTab = async (id) => {
+    const t = tabs.find(x => x.id === id);
+    if (t?.locked && !tabTokens[id]) { const ok = await unlockTab(id); if (!ok) return; }
+    setActiveTabId(id);
+  };
+
+  const handleLockTab = async (id) => {
+    const t = tabs.find(x => x.id === id);
+    if (!t) return;
+    if (t.locked) {
+      const current = window.prompt('Enter the CURRENT passcode to change or remove the lock:');
+      if (current === null) return;
+      const next = window.prompt('New passcode (leave BLANK to remove the lock):', '');
+      if (next === null) return;
+      try {
+        const r = await api.put(`/tabs/${id}/passcode`, { current, passcode: next });
+        setTabs(prev => prev.map(x => x.id === id ? { ...x, locked: r.data.locked } : x));
+        setTabTokens(prev => { const u = { ...prev }; delete u[id]; return u; });
+        if (r.data.locked && next.trim()) {
+          try { const u = await api.post(`/tabs/${id}/unlock`, { passcode: next.trim() }); setTabTokens(p => ({ ...p, [id]: u.data.token })); } catch {}
+        }
+        alert(r.data.locked ? 'Passcode updated.' : 'Lock removed.');
+      } catch (e) { alert(e.response?.data?.error || 'Failed to update passcode.'); }
+    } else {
+      const pc = window.prompt(`Set a passcode to lock "${t.name}".\nOnly people with this passcode can open it — even with the app password.`);
+      if (pc === null || !pc.trim()) return;
+      try {
+        await api.put(`/tabs/${id}/passcode`, { passcode: pc.trim() });
+        setTabs(prev => prev.map(x => x.id === id ? { ...x, locked: true } : x));
+        const u = await api.post(`/tabs/${id}/unlock`, { passcode: pc.trim() });
+        setTabTokens(prev => ({ ...prev, [id]: u.data.token }));
+        alert('Tab locked. Keep the passcode safe — you need it to open this tab anywhere else.');
+      } catch (e) { alert('Failed to lock the tab.'); }
+    }
+  };
+
   // Lazy-load the active tab's contents on first view
   useEffect(() => {
     if (!activeTabId) return;
     const t = tabs.find(x => x.id === activeTabId);
-    if (!t) return;
+    if (!t || tabBlocked(t)) return; // don't fetch locked-tab data until unlocked
     if (t.type === 'schedule' && scheduleByTab[activeTabId] === undefined) {
       api.get(`/schedule?tab_id=${activeTabId}`)
         .then(r => setScheduleByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
@@ -1253,10 +1310,10 @@ export default function MainPage() {
         .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(console.error);
     }
     if (isTableType(t.type) && exhibitsByTab[activeTabId] === undefined) {
-      api.get(`/exhibits?tab_id=${activeTabId}`)
+      api.get(`/exhibits?tab_id=${activeTabId}`, tabCfg(activeTabId))
         .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
     }
-  }, [activeTabId, tabs]);
+  }, [activeTabId, tabs, tabTokens]);
 
   // Background auto-refresh every 15s so edits from other people show up.
   // In-progress typing is safe: NotesCell/TypedCell keep their own local state and
@@ -1269,6 +1326,7 @@ export default function MainPage() {
       api.get('/tabs').then(r => setTabs(r.data)).catch(() => {});
       if (!activeTabId) return;
       const t = tabs.find(x => x.id === activeTabId);
+      if (tabBlocked(t)) return; // don't poll locked-tab data until unlocked
       if (t?.type === 'schedule') {
         api.get(`/schedule?tab_id=${activeTabId}`)
           .then(r => setScheduleByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(() => {});
@@ -1276,12 +1334,12 @@ export default function MainPage() {
         api.get(`/deliverables?tab_id=${activeTabId}`)
           .then(r => setDelivByTab(p => ({ ...p, [activeTabId]: { deliverables: r.data.deliverables, matrix: r.data.matrix } }))).catch(() => {});
       } else if (isTableType(t?.type)) {
-        api.get(`/exhibits?tab_id=${activeTabId}`)
+        api.get(`/exhibits?tab_id=${activeTabId}`, tabCfg(activeTabId))
           .then(r => setExhibitsByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(() => {});
       }
     }, 15000);
     return () => clearInterval(id);
-  }, [user, activeTabId, tabs]);
+  }, [user, activeTabId, tabs, tabTokens]);
 
   // Per-tab state setters that behave like useState updaters for the active tab
   const setActiveSchedule = (updater) =>
@@ -1418,11 +1476,12 @@ export default function MainPage() {
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}
-        onSelect={setActiveTabId}
+        onSelect={handleSelectTab}
         onAdd={handleAddTab}
         onRename={handleRenameTab}
         onDelete={handleDeleteTab}
         onReorder={handleReorderTabs}
+        onLock={handleLockTab}
         trash={trash}
         onRestore={handleRestoreTab}
         onPurge={handlePurgeTab}
@@ -1435,7 +1494,15 @@ export default function MainPage() {
         </div>
       )}
 
-      {activeTab?.type === 'schedule' && (
+      {activeTab && tabBlocked(activeTab) && (
+        <div style={{ textAlign: 'center', padding: 64, color: '#4a5568' }}>
+          <div style={{ fontSize: 44 }}>🔒</div>
+          <div style={{ margin: '12px 0 16px' }}>“{activeTab.name}” is locked.</div>
+          <button className="btn btn-navy btn-sm" onClick={() => unlockTab(activeTab.id)}>Enter passcode</button>
+        </div>
+      )}
+
+      {activeTab?.type === 'schedule' && !tabBlocked(activeTab) && (
         scheduleByTab[activeTabId] === undefined
           ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
           : <ScheduleTab
@@ -1450,7 +1517,7 @@ export default function MainPage() {
             />
       )}
 
-      {activeTab?.type === 'deliverables' && (
+      {activeTab?.type === 'deliverables' && !tabBlocked(activeTab) && (
         delivByTab[activeTabId] === undefined
           ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
           : <DeliverablesTab
@@ -1464,7 +1531,7 @@ export default function MainPage() {
             />
       )}
 
-      {isTableType(activeTab?.type) && (
+      {isTableType(activeTab?.type) && !tabBlocked(activeTab) && (
         exhibitsByTab[activeTabId] === undefined
           ? <div style={{ padding: 24, color: '#718096' }}>Loading…</div>
           : <TableTab
@@ -1477,6 +1544,7 @@ export default function MainPage() {
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
               strikeDelete={isSouvenirFamily(activeTab.type)}
+              token={tabTokens[activeTabId]}
             />
       )}
     </div>

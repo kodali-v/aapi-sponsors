@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { pool } = require('../db');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
@@ -8,6 +9,19 @@ const auth = (req, res, next) => {
   try { jwt.verify(req.cookies?.sponsors_token, JWT_SECRET); next(); }
   catch { res.status(401).json({ error: 'Not authenticated' }); }
 };
+
+// Passcode hashing (salt:hash via scrypt) — shared with the data-access guard
+function hashPasscode(pc) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${crypto.scryptSync(String(pc), salt, 32).toString('hex')}`;
+}
+function verifyPasscode(pc, stored) {
+  if (!stored || !stored.includes(':')) return false;
+  const [salt, hash] = stored.split(':');
+  const test = crypto.scryptSync(String(pc), salt, 32).toString('hex');
+  const a = Buffer.from(hash, 'hex'), b = Buffer.from(test, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 const VALID_TYPES = ['schedule', 'deliverables', 'exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming'];
 
@@ -19,12 +33,15 @@ const COUNT_SELECT = `
     ELSE (SELECT COUNT(*) FROM exhibit_rows er WHERE er.tab_id = t.id)
   END AS item_count`;
 
+// Strip the secret hash; expose only a `locked` boolean
+const sanitize = t => { const { passcode_hash, ...rest } = t; return { ...rest, locked: !!passcode_hash }; };
+
 // List active (non-deleted) tabs
 router.get('/', auth, async (req, res) => {
   const r = await pool.query(
     `SELECT t.*, ${COUNT_SELECT} FROM tabs t WHERE t.deleted_at IS NULL ORDER BY t.sort_order, t.created_at`
   );
-  res.json(r.rows);
+  res.json(r.rows.map(sanitize));
 });
 
 // List trashed tabs (restorable)
@@ -32,7 +49,33 @@ router.get('/trash', auth, async (req, res) => {
   const r = await pool.query(
     `SELECT t.*, ${COUNT_SELECT} FROM tabs t WHERE t.deleted_at IS NOT NULL ORDER BY t.deleted_at DESC`
   );
-  res.json(r.rows);
+  res.json(r.rows.map(sanitize));
+});
+
+// Set / change / remove a tab's passcode. Changing or removing requires the current passcode.
+router.put('/:id/passcode', auth, async (req, res) => {
+  const { passcode, current } = req.body;
+  const r = await pool.query('SELECT passcode_hash FROM tabs WHERE id=$1', [req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: 'Tab not found' });
+  const existing = r.rows[0].passcode_hash;
+  if (existing && !verifyPasscode(current || '', existing)) {
+    return res.status(403).json({ error: 'Current passcode is incorrect' });
+  }
+  const newHash = (passcode && String(passcode).trim()) ? hashPasscode(String(passcode).trim()) : null;
+  await pool.query('UPDATE tabs SET passcode_hash=$1 WHERE id=$2', [newHash, req.params.id]);
+  res.json({ ok: true, locked: !!newHash });
+});
+
+// Unlock: verify the passcode, return a short-lived token scoped to this tab
+router.post('/:id/unlock', auth, async (req, res) => {
+  const { passcode } = req.body;
+  const r = await pool.query('SELECT passcode_hash FROM tabs WHERE id=$1', [req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: 'Tab not found' });
+  const h = r.rows[0].passcode_hash;
+  if (!h) return res.json({ token: null }); // not locked
+  if (!verifyPasscode(passcode || '', h)) return res.status(403).json({ error: 'Incorrect passcode' });
+  const token = jwt.sign({ tab: req.params.id, scope: 'tab' }, JWT_SECRET, { expiresIn: '12h' });
+  res.json({ token });
 });
 
 // Create tab (type: 'schedule' | 'deliverables')
