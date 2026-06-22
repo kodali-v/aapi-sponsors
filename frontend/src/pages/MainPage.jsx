@@ -955,7 +955,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
         }
       }
       const sheet = wb.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }); // raw:false => dates come as text (e.g. 5/30/26) not serial numbers
       const mapped = json.map(r => mapExcelRow(r, cols)).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
       if (!mapped.length) { alert('No data rows found. Make sure the first row has column headers.'); return; }
       let replace = false;
