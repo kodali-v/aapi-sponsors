@@ -801,6 +801,7 @@ export const ROOMING_COLS = [
   { key: 'beds', label: 'Beds Request', w: 110, aliases: ['bedsrequest', 'beds', 'bedrequest', 'bedtype'] },
   { key: 'revhotel', label: 'Revised Hotel', w: 110, options: HOTEL_OPTS, aliases: ['revisedhotel', 'revhotel'] },
   { key: 'vjnotes', label: 'VJ Notes', w: 160, aliases: ['vjnotes', 'vjnote'] },
+  { key: 'company', label: 'Company Name', w: 160, aliases: ['companyname', 'company', 'organization', 'org'] },
   { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'fname'] },
   { key: 'last', label: 'Last Name', w: 110, aliases: ['lastname', 'lname'] },
   { key: 'name', label: 'Name', w: 160, aliases: ['name'] },
