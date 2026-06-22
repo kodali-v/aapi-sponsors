@@ -47,9 +47,10 @@ router.post('/bulk', auth, async (req, res) => {
     let max = replace ? 0 : (await client.query('SELECT COALESCE(MAX(sort_order),0) as m FROM exhibit_rows WHERE tab_id=$1', [tab_id || null])).rows[0].m;
     for (const data of rows) {
       max += 1;
+      const d = JSON.stringify(data || {});
       const r = await client.query(
-        'INSERT INTO exhibit_rows (tab_id, data, sort_order) VALUES ($1,$2,$3) RETURNING *',
-        [tab_id || null, JSON.stringify(data || {}), max]
+        'INSERT INTO exhibit_rows (tab_id, data, orig, sort_order) VALUES ($1,$2,$2,$3) RETURNING *',
+        [tab_id || null, d, max]   // orig = data snapshot (imported baseline)
       );
       inserted.push(r.rows[0]);
     }
@@ -61,6 +62,14 @@ router.post('/bulk', auth, async (req, res) => {
     client.release();
   }
   res.json(inserted);
+});
+
+// Reset change-highlight baseline to current values (must be before /:id)
+router.post('/baseline', auth, async (req, res) => {
+  const { tab_id } = req.body;
+  if (!(await tabUnlocked(tab_id, req))) return res.status(403).json(LOCKED);
+  if (tab_id) await pool.query('UPDATE exhibit_rows SET orig = data WHERE tab_id=$1', [tab_id]);
+  res.json({ ok: true });
 });
 
 // Reorder rows (must be before /:id)

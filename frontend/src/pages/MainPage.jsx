@@ -780,24 +780,26 @@ export const VIPADS_COLS = [
   { key: 'created', label: 'Created Ad?', w: 120, options: ['Yes', 'No'], aliases: ['createdad', 'created', 'created?', 'done', 'ready'] },
   { key: 'remarks', label: 'Remarks', w: 200, aliases: ['remarks', 'notes', 'comments', 'comment'] },
 ];
+const HOTEL_OPTS = ['Tampa Marriott', 'JW Marriott'];
 export const ROOMING_COLS = [
-  { key: 'sno', label: 'Sno', w: 50, aliases: ['sno', 'sno.', 'sl', 'slno', 'serial', 'no', '#'] },
-  { key: 'package', label: 'Package', w: 110, aliases: ['package', 'pkg'] },
-  { key: 'guests', label: '# of Guests', w: 90, aliases: ['#ofguests', 'guests', 'noofguests', 'numguests', '#guests'] },
-  { key: 'hotel', label: 'Hotel', w: 130, options: ['Tampa Marriott', 'JW Marriott'], aliases: ['hotel'] },
-  { key: 'upgrade', label: 'Upgrade', w: 175, options: ['Waterview Balcony King', 'Waterview Balcony Queen', 'King Suite', 'Luxury Suite', 'JWM Premium View King', 'JWM Premium View Queen'], aliases: ['upgrade', 'roomtype', 'room'] },
-  { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'first', 'fname'] },
-  { key: 'last', label: 'Last Name', w: 110, aliases: ['lastname', 'last', 'lname'] },
-  { key: 'addl', label: 'Additional Guest Names', w: 180, aliases: ['additionalguestnames', 'additionalguests', 'guestnames', 'additional'] },
+  { key: 'sno', label: 'Sno', w: 50, aliases: ['sno', 'sno.', 'sl', 'slno', 'serial'] },
+  { key: 'groupid', label: 'Group ID', w: 100, aliases: ['groupid'] },
+  { key: 'package', label: 'Package', w: 90, aliases: ['package', 'pkg'] },
+  { key: 'date', label: 'Date', w: 90, aliases: ['date', 'regdate'] },
+  { key: 'name', label: 'Name', w: 150, aliases: ['name'] },
+  { key: 'regid', label: 'Reg ID', w: 95, aliases: ['regid'] },
+  { key: 'guestname', label: 'Guest Name', w: 150, aliases: ['guestname', 'additionalguestnames', 'additionalguests'] },
+  { key: 'guestregid', label: 'Guest Reg ID', w: 100, aliases: ['guestregid', 'guestregids'] },
+  { key: 'amount', label: 'Amount', w: 90, aliases: ['amount', 'amt'] },
+  { key: 'guests', label: '# of Guests', w: 80, aliases: ['ofguests', 'guests', 'numguests', 'noofguests'] },
+  { key: 'discount', label: 'Discount Taken', w: 110, aliases: ['discounttaken', 'discount'] },
+  { key: 'hotel', label: 'Hotel', w: 130, options: HOTEL_OPTS, aliases: ['hotel'] },
+  { key: 'assigned', label: 'Assigned Hotel', w: 140, options: HOTEL_OPTS, aliases: ['assignedhotel'] },
+  { key: 'request', label: 'Request', w: 120, aliases: ['request', 'requests'] },
   { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
-  { key: 'conf', label: 'Confirmation Number', w: 150, aliases: ['confirmationnumber', 'confirmation', 'confno', 'conf', 'confirmation#'] },
-  { key: 'arr', label: 'Arr Date', w: 100, aliases: ['arrdate', 'arrivaldate', 'arrival', 'arr'] },
-  { key: 'dep', label: 'Dep Date', w: 100, aliases: ['depdate', 'departuredate', 'departure', 'dep'] },
-  { key: 'nights', label: '# Room Nights', w: 100, aliases: ['#roomnights', 'roomnights', 'nights', '#nights'] },
-  { key: 'revarr', label: 'Rev Arr Date', w: 100, aliases: ['revarrdate', 'revarrivaldate', 'revarr'] },
-  { key: 'revdep', label: 'Rev Dep Date', w: 100, aliases: ['revdepdate', 'revdeparturedate', 'revdep'] },
-  { key: 'revnights', label: 'Rev # Room Nights', w: 110, aliases: ['rev#roomnights', 'revroomnights', 'revnights'] },
-  { key: 'remarks', label: 'Remarks', w: 180, aliases: ['remarks', 'notes', 'comments'] },
+  { key: 'conf', label: 'Confirmation Number', w: 150, aliases: ['confirmationnumber', 'confirmation', 'confno', 'conf'] },
+  { key: 'arr', label: 'Arrival Date', w: 100, aliases: ['arrivaldate', 'arrdate', 'arrival', 'arr'] },
+  { key: 'dep', label: 'Departure Date', w: 100, aliases: ['departuredate', 'depdate', 'departure', 'dep'] },
 ];
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS };
 export { TABLE_COLS };
@@ -818,8 +820,14 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token }) {
+export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token, trackChanges = false }) {
   const cfg = token ? { headers: { 'x-tab-token': token } } : undefined;
+  const changedCount = trackChanges ? rows.filter(r => r.orig && cols.some(c => String(r.data?.[c.key] ?? '') !== String(r.orig?.[c.key] ?? ''))).length : 0;
+  const resetHighlights = async () => {
+    if (!window.confirm('Clear all change highlights and set the CURRENT values as the new baseline?')) return;
+    try { await api.post(`${apiBase}/baseline`, { tab_id: tabId }, cfg); } catch {}
+    setRows(prev => prev.map(r => ({ ...r, orig: { ...r.data } })));
+  };
   const fileRef = useRef(null);
   const wrapRef = useRef(null);
   const [importing, setImporting] = useState(false);
@@ -970,6 +978,12 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
             🔗 Sync to Deliverables
           </button>
         )}
+        {trackChanges && (
+          <span style={{ fontSize: 12, color: '#92660a', alignSelf: 'center', marginRight: 4 }}>
+            {changedCount > 0 ? `🟡 ${changedCount} changed` : 'No changes vs import'}
+            {changedCount > 0 && <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={resetHighlights} title="Set current values as the new baseline (clears highlights)">Clear highlights</button>}
+          </span>
+        )}
         <button className="btn btn-ghost btn-sm" disabled={!rows.length} onClick={exportFile} title="Download as Excel">
           ⬇ Download Excel
         </button>
@@ -1010,8 +1024,11 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
                   title={sort.key ? 'Clear the column sort to drag rows' : 'Drag to reorder row'}
                   style={{ cursor: sort.key ? 'not-allowed' : 'grab', color: '#94a3b8', userSelect: 'none', fontSize: 13, display: 'inline-block', padding: '4px 2px' }}>⠿</span>
               </td>
-              {cols.map(c => (
-                <td key={c.key} style={{ padding: 2 }}>
+              {cols.map(c => {
+                const changed = trackChanges && row.orig && String(row.data?.[c.key] ?? '') !== String(row.orig?.[c.key] ?? '');
+                return (
+                <td key={c.key} style={{ padding: 2, background: changed ? '#fde68a' : undefined }}
+                  title={changed ? `Changed from: ${row.orig?.[c.key] || '(blank)'}` : undefined}>
                   {(c.options || c.status) ? (() => {
                     const opts = c.options || ['Confirmed', 'Pending'];
                     const cur = row.data?.[c.key] || '';
@@ -1020,7 +1037,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
                     return (
                       <select className="note-input"
                         style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
-                          background: sc ? sc.bg : 'transparent', color: sc ? sc.color : 'inherit', fontWeight: sc ? 700 : 400 }}
+                          background: changed ? 'transparent' : (sc ? sc.bg : 'transparent'), color: sc ? sc.color : 'inherit', fontWeight: (sc || changed) ? 700 : 400 }}
                         value={cur} onChange={e => saveCell(row.id, c.key, e.target.value)}>
                         <option value="">—</option>
                         {list.map(o => <option key={o} value={o}>{o}</option>)}
@@ -1030,7 +1047,8 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
                     <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} onSave={v => saveCell(row.id, c.key, v)} />
                   )}
                 </td>
-              ))}
+                );
+              })}
               <td style={{ textAlign: 'center' }}>
                 <span style={{ cursor: 'pointer', color: row.struck ? '#059669' : '#dc2626', fontSize: 12 }}
                   title={strikeDelete ? (row.struck ? 'Restore (un-strike)' : 'Strike out (keeps the row)') : 'Delete row'}
@@ -1545,6 +1563,7 @@ export default function MainPage() {
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
               strikeDelete={isSouvenirFamily(activeTab.type)}
               token={tabTokens[activeTabId]}
+              trackChanges={activeTab.type === 'rooming'}
             />
       )}
     </div>

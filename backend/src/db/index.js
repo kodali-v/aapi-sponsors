@@ -100,6 +100,9 @@ const initDB = async () => {
       -- Strike-through instead of delete (kept visible, crossed out)
       ALTER TABLE exhibit_rows ADD COLUMN IF NOT EXISTS struck BOOLEAN DEFAULT FALSE;
 
+      -- Imported baseline snapshot (for change-highlighting); NULL = no baseline (manually added)
+      ALTER TABLE exhibit_rows ADD COLUMN IF NOT EXISTS orig JSONB;
+
       -- Per-tab passcode lock (salt:hash); NULL = unlocked
       ALTER TABLE tabs ADD COLUMN IF NOT EXISTS passcode_hash TEXT;
 
