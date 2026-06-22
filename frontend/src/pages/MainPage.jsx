@@ -753,6 +753,15 @@ const STATUS_COLORS = {
 };
 const MARK_COLORS = { yellow: '#fde68a', red: '#fecaca' };
 
+// Upgrade room-block caps (per night). Used by the Rooming Capacity panel.
+const UPGRADE_CAPS = { 'TM-WBK': 30, 'TM-WBQ': 30, 'TM-KS': 10, 'TM-LS': 3, 'JWM-SpaK': 5, 'JWM-PVK': 5, 'JWM-PVQ': 5 };
+// Parse rooming dates like "Jul-02-2026" or "7/2/26" -> a midnight Date (null if unparseable)
+function parseRoomDate(s) {
+  if (!s) return null;
+  const d = new Date(String(s).trim().replace(/-/g, ' '));
+  return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 export const SOUVENIR_COLS = [
   { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
   { key: 'phone', label: 'Phone #', w: 120, aliases: ['phone', 'phone#', 'phonenumber', 'cell', 'mobile'] },
@@ -838,6 +847,32 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     const m = new Map();
     rows.forEach(r => { const v = String(r.data?.[countCol] ?? '').trim() || '(blank)'; m.set(v, (m.get(v) || 0) + 1); });
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  })();
+  const hasCapacity = ['upgrade', 'arr', 'dep'].every(k => cols.some(c => c.key === k));
+  const [showCapacity, setShowCapacity] = useState(false);
+  const capacity = (() => {
+    if (!hasCapacity) return null;
+    let minD = null, maxD = null;
+    const stays = [];
+    rows.forEach(r => {
+      const up = String(r.data?.upgrade ?? '').trim();
+      if (!up) return;
+      const a = parseRoomDate(r.data?.arr), b = parseRoomDate(r.data?.dep);
+      if (!a || !b || b <= a) return;
+      stays.push({ up, a, b });
+      if (!minD || a < minD) minD = a;
+      if (!maxD || b > maxD) maxD = b;
+    });
+    if (!stays.length) return { nights: [], rows: [], unparsed: rows.some(r => String(r.data?.upgrade ?? '').trim() && !parseRoomDate(r.data?.arr)) };
+    const nights = [];
+    for (let d = new Date(minD); d < maxD; d.setDate(d.getDate() + 1)) nights.push(new Date(d));
+    const types = [...new Set([...Object.keys(UPGRADE_CAPS), ...stays.map(s => s.up)])];
+    const out = types.map(t => {
+      const cap = UPGRADE_CAPS[t];
+      const occ = nights.map(n => stays.filter(s => s.up === t && s.a <= n && n < s.b).length);
+      return { type: t, cap, occ };
+    }).filter(r => r.cap != null || r.occ.some(n => n > 0));
+    return { nights: nights.map(n => `${n.getMonth() + 1}/${n.getDate()}`), rows: out };
   })();
   const [dragRowId, setDragRowId] = useState(null);
   const [overRowId, setOverRowId] = useState(null);
@@ -1016,6 +1051,11 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
         <button className="btn btn-ghost btn-sm" onClick={() => setShowCounts(v => !v)} title="Show value counts by column">
           📊 Counts
         </button>
+        {hasCapacity && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowCapacity(v => !v)} title="Upgrade room-block usage vs. caps, per night">
+            🛏 Capacity
+          </button>
+        )}
         <span style={{ flex: 1 }} />
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
         {onSync && (
@@ -1054,6 +1094,42 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
             </span>
           ))}
           <span style={{ marginLeft: 'auto', fontSize: 12, color: '#718096' }}>total {rows.length}</span>
+        </div>
+      )}
+
+      {showCapacity && capacity && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 16, overflowX: 'auto' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f', marginBottom: 8 }}>
+            🛏 Upgrade capacity — rooms used per night (red = over the cap)
+          </div>
+          {capacity.rows.length === 0 ? (
+            <div style={{ color: '#a0aec0', fontSize: 13 }}>
+              {capacity.unparsed ? 'Could not read Arrival/Departure dates — check the date format.' : 'No upgrades assigned yet.'}
+            </div>
+          ) : (
+            <table className="del-table" style={{ width: 'auto' }}>
+              <thead>
+                <tr>
+                  <th>Upgrade</th>
+                  <th style={{ textAlign: 'center' }}>Cap</th>
+                  {capacity.nights.map(n => <th key={n} style={{ textAlign: 'center' }}>{n}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {capacity.rows.map(r => (
+                  <tr key={r.type}>
+                    <td style={{ fontWeight: 600 }}>{r.type}</td>
+                    <td style={{ textAlign: 'center', color: '#718096' }}>{r.cap ?? '—'}</td>
+                    {r.occ.map((n, i) => {
+                      const over = r.cap != null && n > r.cap;
+                      return <td key={i} style={{ textAlign: 'center', background: over ? '#fecaca' : (r.cap != null && n === r.cap ? '#fde68a' : undefined), fontWeight: over ? 700 : 400, color: over ? '#b91c1c' : '#1a202c' }}>{n}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div style={{ fontSize: 11, color: '#718096', marginTop: 6 }}>Counts each room occupying that night (arrival ≤ night &lt; departure). Yellow = at cap, red = over.</div>
         </div>
       )}
 
