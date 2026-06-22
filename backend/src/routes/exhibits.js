@@ -96,14 +96,16 @@ router.post('/reorder', auth, async (req, res) => {
 // Update a row: data and/or struck (only provided fields change)
 router.put('/:id', auth, async (req, res) => {
   if (!(await tabUnlocked(await rowTabId(req.params.id), req))) return res.status(403).json(LOCKED);
-  const { data, struck } = req.body;
+  const { data, struck, marks } = req.body;
   const r = await pool.query(
     `UPDATE exhibit_rows
        SET data   = COALESCE($1::jsonb, data),
-           struck = COALESCE($2, struck)
-     WHERE id=$3 RETURNING *`,
+           struck = COALESCE($2, struck),
+           marks  = COALESCE($3::jsonb, marks)
+     WHERE id=$4 RETURNING *`,
     [data !== undefined ? JSON.stringify(data) : null,
      typeof struck === 'boolean' ? struck : null,
+     marks !== undefined ? JSON.stringify(marks) : null,
      req.params.id]
   );
   res.json(r.rows[0]);

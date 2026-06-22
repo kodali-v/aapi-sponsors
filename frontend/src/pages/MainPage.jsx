@@ -751,6 +751,7 @@ const STATUS_COLORS = {
   'IN PROGRESS': { bg: '#fef3c7', color: '#b45309' },
   'DONE': { bg: '#dcfce7', color: '#15803d' },
 };
+const MARK_COLORS = { yellow: '#fde68a', red: '#fecaca' };
 
 export const SOUVENIR_COLS = [
   { key: 'company', label: 'Company', w: 160, aliases: ['company', 'companyname', 'advertiser', 'sponsor', 'name'] },
@@ -780,26 +781,22 @@ export const VIPADS_COLS = [
   { key: 'created', label: 'Created Ad?', w: 120, options: ['Yes', 'No'], aliases: ['createdad', 'created', 'created?', 'done', 'ready'] },
   { key: 'remarks', label: 'Remarks', w: 200, aliases: ['remarks', 'notes', 'comments', 'comment'] },
 ];
-const HOTEL_OPTS = ['Tampa Marriott', 'JW Marriott'];
+const HOTEL_OPTS = ['TM', 'JWM', 'TMU'];
 export const ROOMING_COLS = [
-  { key: 'sno', label: 'Sno', w: 50, aliases: ['sno', 'sno.', 'sl', 'slno', 'serial'] },
-  { key: 'groupid', label: 'Group ID', w: 100, aliases: ['groupid'] },
-  { key: 'package', label: 'Package', w: 90, aliases: ['package', 'pkg'] },
-  { key: 'date', label: 'Date', w: 90, aliases: ['date', 'regdate'] },
-  { key: 'name', label: 'Name', w: 150, aliases: ['name'] },
   { key: 'regid', label: 'Reg ID', w: 95, aliases: ['regid'] },
-  { key: 'guestname', label: 'Guest Name', w: 150, aliases: ['guestname', 'additionalguestnames', 'additionalguests'] },
-  { key: 'guestregid', label: 'Guest Reg ID', w: 100, aliases: ['guestregid', 'guestregids'] },
-  { key: 'amount', label: 'Amount', w: 90, aliases: ['amount', 'amt'] },
-  { key: 'guests', label: '# of Guests', w: 80, aliases: ['ofguests', 'guests', 'numguests', 'noofguests'] },
-  { key: 'discount', label: 'Discount Taken', w: 110, aliases: ['discounttaken', 'discount'] },
-  { key: 'hotel', label: 'Hotel', w: 130, options: HOTEL_OPTS, aliases: ['hotel'] },
-  { key: 'assigned', label: 'Assigned Hotel', w: 140, options: HOTEL_OPTS, aliases: ['assignedhotel'] },
-  { key: 'request', label: 'Request', w: 120, aliases: ['request', 'requests'] },
-  { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
-  { key: 'conf', label: 'Confirmation Number', w: 150, aliases: ['confirmationnumber', 'confirmation', 'confno', 'conf'] },
+  { key: 'groupid', label: 'Group ID', w: 95, aliases: ['groupid'] },
+  { key: 'package', label: 'Package', w: 100, aliases: ['package', 'pkg'] },
+  { key: 'paidon', label: 'Paid on', w: 90, aliases: ['paidon', 'paid'] },
+  { key: 'hotel', label: 'HOTEL', w: 90, options: HOTEL_OPTS, aliases: ['hotel'] },
+  { key: 'revhotel', label: 'Revised Hotel', w: 110, options: HOTEL_OPTS, aliases: ['revisedhotel', 'revhotel'] },
+  { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'fname'] },
+  { key: 'last', label: 'Last Name', w: 110, aliases: ['lastname', 'lname'] },
+  { key: 'name', label: 'Name', w: 160, aliases: ['name'] },
+  { key: 'conf', label: 'Confirmation #', w: 120, aliases: ['confirmation', 'confirmationnumber', 'confno', 'conf'] },
   { key: 'arr', label: 'Arrival Date', w: 100, aliases: ['arrivaldate', 'arrdate', 'arrival', 'arr'] },
   { key: 'dep', label: 'Departure Date', w: 100, aliases: ['departuredate', 'depdate', 'departure', 'dep'] },
+  { key: 'addl', label: 'Additional Guest Names', w: 180, aliases: ['additionalguestnames', 'additionalguests', 'guestname', 'guestnames'] },
+  { key: 'remarks', label: 'Remarks', w: 160, aliases: ['remarks', 'notes', 'comments'] },
 ];
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS };
 export { TABLE_COLS };
@@ -904,6 +901,17 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     const data = { ...(row?.data || {}), [key]: value };
     setRows(prev => prev.map(x => x.id === rowId ? { ...x, data } : x));
     try { await api.put(`${apiBase}/${rowId}`, { data }, cfg); } catch { /* keep optimistic value */ }
+  };
+
+  // Right-click a cell to cycle its manual highlight: none -> yellow -> red -> none
+  const cycleMark = async (rowId, key) => {
+    const row = rows.find(x => x.id === rowId);
+    const cur = row?.marks?.[key];
+    const next = cur === 'yellow' ? 'red' : cur === 'red' ? null : 'yellow';
+    const marks = { ...(row?.marks || {}) };
+    if (next) marks[key] = next; else delete marks[key];
+    setRows(prev => prev.map(x => x.id === rowId ? { ...x, marks } : x));
+    try { await api.put(`${apiBase}/${rowId}`, { marks }, cfg); } catch {}
   };
 
   const deleteRow = async (rowId) => {
@@ -1026,9 +1034,12 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
               </td>
               {cols.map(c => {
                 const changed = trackChanges && row.orig && String(row.data?.[c.key] ?? '') !== String(row.orig?.[c.key] ?? '');
+                const mark = row.marks?.[c.key];
+                const bg = mark ? MARK_COLORS[mark] : (changed ? '#fde68a' : undefined);
                 return (
-                <td key={c.key} style={{ padding: 2, background: changed ? '#fde68a' : undefined }}
-                  title={changed ? `Changed from: ${row.orig?.[c.key] || '(blank)'}` : undefined}>
+                <td key={c.key} style={{ padding: 2, background: bg }}
+                  onContextMenu={e => { e.preventDefault(); cycleMark(row.id, c.key); }}
+                  title={changed && !mark ? `Changed from: ${row.orig?.[c.key] || '(blank)'}` : 'Right-click to highlight (yellow → red → none)'}>
                   {(c.options || c.status) ? (() => {
                     const opts = c.options || ['Confirmed', 'Pending'];
                     const cur = row.data?.[c.key] || '';

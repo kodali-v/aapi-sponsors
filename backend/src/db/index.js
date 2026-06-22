@@ -103,6 +103,9 @@ const initDB = async () => {
       -- Imported baseline snapshot (for change-highlighting); NULL = no baseline (manually added)
       ALTER TABLE exhibit_rows ADD COLUMN IF NOT EXISTS orig JSONB;
 
+      -- Manual per-cell highlight colors: { colKey: 'yellow' | 'red' }
+      ALTER TABLE exhibit_rows ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '{}'::jsonb;
+
       -- Per-tab passcode lock (salt:hash); NULL = unlocked
       ALTER TABLE tabs ADD COLUMN IF NOT EXISTS passcode_hash TEXT;
 
