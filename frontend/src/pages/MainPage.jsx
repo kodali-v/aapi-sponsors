@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { api, useAuth } from '../App';
 
 // ── Sponsors Panel ────────────────────────────────────────
@@ -875,7 +875,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
   };
 
   const exportFile = () => {
-    const data = rows.map(r => {
+    const data = displayRows.map(r => {
       const o = {};
       for (const c of cols) {
         const raw = r.data?.[c.key] ?? '';
@@ -889,14 +889,22 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
       return o;
     });
     const ws = XLSX.utils.json_to_sheet(data, { header: cols.map(c => c.label) });
-    // Give money columns a currency number format so Excel shows $ and SUM totals them
-    const range = XLSX.utils.decode_range(ws['!ref']);
+    // Bold the header row
     cols.forEach((c, ci) => {
-      if (!c.money) return;
-      for (let R = 1; R <= range.e.r; R++) {
-        const cell = ws[XLSX.utils.encode_cell({ r: R, c: ci })];
-        if (cell && cell.t === 'n') cell.z = '$#,##0.00';
-      }
+      const hc = ws[XLSX.utils.encode_cell({ r: 0, c: ci })];
+      if (hc) hc.s = { font: { bold: true } };
+    });
+    // Money number format + carry over the cell highlights (manual marks + change-highlight) as fills
+    displayRows.forEach((r, ri) => {
+      cols.forEach((c, ci) => {
+        const cell = ws[XLSX.utils.encode_cell({ r: ri + 1, c: ci })];
+        if (!cell) return;
+        if (c.money && cell.t === 'n') cell.z = '$#,##0.00';
+        const mark = r.marks?.[c.key];
+        const changed = trackChanges && r.orig && String(r.data?.[c.key] ?? '') !== String(r.orig?.[c.key] ?? '');
+        const rgb = mark === 'red' ? 'FECACA' : (mark === 'yellow' || changed) ? 'FDE68A' : null;
+        if (rgb) cell.s = { ...(cell.s || {}), fill: { patternType: 'solid', fgColor: { rgb }, bgColor: { rgb } } };
+      });
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
