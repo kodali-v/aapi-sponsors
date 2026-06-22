@@ -829,7 +829,8 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
   const fileRef = useRef(null);
   const wrapRef = useRef(null);
   const [importing, setImporting] = useState(false);
-  const [sort, setSort] = useState({ key: null, dir: 1 });
+  const [sortKeys, setSortKeys] = useState([]); // [{key,dir}] — multi-level sort
+  const sortActive = sortKeys.length > 0;
   const [dragRowId, setDragRowId] = useState(null);
   const [overRowId, setOverRowId] = useState(null);
 
@@ -846,15 +847,30 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     try { await api.post(`${apiBase}/reorder`, { tab_id: tabId, order: reordered.map(r => r.id) }, cfg); } catch { /* keep optimistic order */ }
   };
 
-  const toggleSort = key => setSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: 1 });
-  const displayRows = sort.key
-    ? [...rows].sort((a, b) => cmpVals(a.data?.[sort.key], b.data?.[sort.key], cols.find(c => c.key === sort.key)?.money) * sort.dir)
+  // Click = sort by this column (toggle dir). Shift+click = add it as another sort level.
+  const toggleSort = (key, additive) => setSortKeys(prev => {
+    const i = prev.findIndex(s => s.key === key);
+    if (additive) {
+      if (i >= 0) { const n = [...prev]; n[i] = { key, dir: -n[i].dir }; return n; }
+      return [...prev, { key, dir: 1 }];
+    }
+    return (prev.length === 1 && i === 0) ? [{ key, dir: -prev[0].dir }] : [{ key, dir: 1 }];
+  });
+  const displayRows = sortActive
+    ? [...rows].sort((a, b) => {
+        for (const s of sortKeys) {
+          const money = cols.find(c => c.key === s.key)?.money;
+          const r = cmpVals(a.data?.[s.key], b.data?.[s.key], money) * s.dir;
+          if (r) return r;
+        }
+        return 0;
+      })
     : rows;
 
   const addRow = async () => {
     const r = await api.post(apiBase, { tab_id: tabId, data: {} }, cfg);
     setRows(prev => [r.data, ...prev]); // new row at the top
-    setSort({ key: null, dir: 1 });     // clear any sort so it stays on top
+    setSortKeys([]);                    // clear sort so it stays on top
     requestAnimationFrame(() => { if (wrapRef.current) wrapRef.current.scrollTop = 0; });
   };
 
@@ -1007,19 +1023,22 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
         <thead>
           <tr>
             <th style={{ width: 22 }}></th>
-            {cols.map(c => (
-              <th key={c.key} onClick={() => toggleSort(c.key)} title="Click to sort"
+            {cols.map(c => {
+              const si = sortKeys.findIndex(s => s.key === c.key);
+              return (
+              <th key={c.key} onClick={e => toggleSort(c.key, e.shiftKey)} title="Click to sort · Shift+click to add a second level"
                 style={{ minWidth: c.w, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
-                {c.label}{sortArrow(sort.key === c.key, sort.dir)}
+                {c.label}{si >= 0 ? (sortKeys[si].dir === 1 ? ' ▲' : ' ▼') + (sortKeys.length > 1 ? ` ${si + 1}` : '') : ''}
               </th>
-            ))}
+              );
+            })}
             <th style={{ width: 36 }}></th>
           </tr>
         </thead>
         <tbody>
           {displayRows.map((row, i) => (
             <tr key={row.id}
-              onDragOver={e => { if (dragRowId && !sort.key) { e.preventDefault(); if (overRowId !== row.id) setOverRowId(row.id); } }}
+              onDragOver={e => { if (dragRowId && !sortActive) { e.preventDefault(); if (overRowId !== row.id) setOverRowId(row.id); } }}
               onDrop={() => handleRowDrop(row.id)}
               style={{ background: i % 2 === 0 ? '#ffffff' : '#f1f5f9',
                 textDecoration: row.struck ? 'line-through' : 'none',
@@ -1027,11 +1046,11 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
                 borderTop: overRowId === row.id ? '2px solid #1e3a5f' : undefined }}>
               <td style={{ textAlign: 'center', padding: 0 }}>
                 <span
-                  draggable={!sort.key}
-                  onDragStart={() => { if (!sort.key) setDragRowId(row.id); }}
+                  draggable={!sortActive}
+                  onDragStart={() => { if (!sortActive) setDragRowId(row.id); }}
                   onDragEnd={() => { setDragRowId(null); setOverRowId(null); }}
-                  title={sort.key ? 'Clear the column sort to drag rows' : 'Drag to reorder row'}
-                  style={{ cursor: sort.key ? 'not-allowed' : 'grab', color: '#94a3b8', userSelect: 'none', fontSize: 13, display: 'inline-block', padding: '4px 2px' }}>⠿</span>
+                  title={sortActive ? 'Clear the column sort to drag rows' : 'Drag to reorder row'}
+                  style={{ cursor: sortActive ? 'not-allowed' : 'grab', color: '#94a3b8', userSelect: 'none', fontSize: 13, display: 'inline-block', padding: '4px 2px' }}>⠿</span>
               </td>
               {cols.map(c => {
                 const changed = trackChanges && row.orig && String(row.data?.[c.key] ?? '') !== String(row.orig?.[c.key] ?? '');
