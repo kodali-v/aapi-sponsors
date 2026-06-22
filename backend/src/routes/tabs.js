@@ -128,11 +128,17 @@ router.delete('/:id/permanent', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Save per-tab column order (array of column keys) — must be before /:id
+// Save per-tab column order and/or hidden columns — must be before /:id
 router.put('/:id/columns', auth, async (req, res) => {
-  const { order } = req.body;
-  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
-  await pool.query('UPDATE tabs SET col_order=$1 WHERE id=$2', [JSON.stringify(order), req.params.id]);
+  const { order, hidden } = req.body;
+  await pool.query(
+    `UPDATE tabs SET col_order = COALESCE($1::jsonb, col_order),
+                     col_hidden = COALESCE($2::jsonb, col_hidden)
+     WHERE id=$3`,
+    [order !== undefined ? JSON.stringify(order) : null,
+     hidden !== undefined ? JSON.stringify(hidden) : null,
+     req.params.id]
+  );
   res.json({ ok: true });
 });
 

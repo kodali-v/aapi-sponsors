@@ -109,8 +109,9 @@ const initDB = async () => {
       -- Per-tab passcode lock (salt:hash); NULL = unlocked
       ALTER TABLE tabs ADD COLUMN IF NOT EXISTS passcode_hash TEXT;
 
-      -- Per-tab column order override (array of column keys) for table tabs
+      -- Per-tab column order + hidden-columns overrides (arrays of column keys) for table tabs
       ALTER TABLE tabs ADD COLUMN IF NOT EXISTS col_order JSONB;
+      ALTER TABLE tabs ADD COLUMN IF NOT EXISTS col_hidden JSONB;
 
       -- Soft-delete (Trash): deleted tabs keep their rows and are restorable for 30 days
       ALTER TABLE tabs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;

@@ -798,6 +798,7 @@ export const ROOMING_COLS = [
   { key: 'paidon', label: 'Paid on', w: 90, aliases: ['paidon', 'paid'] },
   { key: 'hotel', label: 'HOTEL', w: 90, options: HOTEL_OPTS, aliases: ['hotel'] },
   { key: 'upgrade', label: 'Upgrade', w: 110, options: ['TM-WBK', 'TM-WBQ', 'TM-KS', 'TM-LS', 'JWM-SpaK', 'JWM-PVK', 'JWM-PVQ'], aliases: ['upgrade', 'roomtype', 'room'] },
+  { key: 'beds', label: 'Beds Request', w: 110, aliases: ['bedsrequest', 'beds', 'bedrequest', 'bedtype'] },
   { key: 'revhotel', label: 'Revised Hotel', w: 110, options: HOTEL_OPTS, aliases: ['revisedhotel', 'revhotel'] },
   { key: 'vjnotes', label: 'VJ Notes', w: 160, aliases: ['vjnotes', 'vjnote'] },
   { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'fname'] },
@@ -836,13 +837,15 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token, trackChanges = false, onReorderCols }) {
+export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token, trackChanges = false, onReorderCols, hidden = [], onToggleCol }) {
   const cfg = token ? { headers: { 'x-tab-token': token } } : undefined;
+  const cols = allCols.filter(c => !hidden.includes(c.key)); // visible columns for display/export
+  const [showCols, setShowCols] = useState(false);
   const [dragColKey, setDragColKey] = useState(null);
   const [overColKey, setOverColKey] = useState(null);
   const dropCol = (targetKey) => {
     if (!dragColKey || dragColKey === targetKey) { setDragColKey(null); setOverColKey(null); return; }
-    const keys = cols.map(c => c.key);
+    const keys = allCols.map(c => c.key);
     const from = keys.indexOf(dragColKey), to = keys.indexOf(targetKey);
     keys.splice(to, 0, keys.splice(from, 1)[0]);
     setDragColKey(null); setOverColKey(null);
@@ -867,7 +870,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
     rows.forEach(r => { const v = String(r.data?.[countCol] ?? '').trim() || '(blank)'; m.set(v, (m.get(v) || 0) + 1); });
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   })();
-  const hasCapacity = ['upgrade', 'arr', 'dep'].every(k => cols.some(c => c.key === k));
+  const hasCapacity = ['upgrade', 'arr', 'dep'].every(k => allCols.some(c => c.key === k));
   const [showCapacity, setShowCapacity] = useState(false);
   const capacity = (() => {
     if (!hasCapacity) return null;
@@ -1042,7 +1045,7 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
       }
       const sheet = wb.Sheets[sheetName];
       const json = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }); // raw:false => dates come as text (e.g. 5/30/26) not serial numbers
-      const mapped = json.map(r => mapExcelRow(r, cols)).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
+      const mapped = json.map(r => mapExcelRow(r, allCols)).filter(d => Object.values(d).some(v => String(v).trim() !== ''));
       if (!mapped.length) { alert('No data rows found. Make sure the first row has column headers.'); return; }
       let replace = false;
       if (rows.length > 0) {
@@ -1073,6 +1076,11 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
         {hasCapacity && (
           <button className="btn btn-ghost btn-sm" onClick={() => setShowCapacity(v => !v)} title="Upgrade room-block usage vs. caps, per night">
             🛏 Capacity
+          </button>
+        )}
+        {onToggleCol && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowCols(v => !v)} title="Show / hide columns">
+            ⚙ Columns{hidden.length ? ` (${hidden.length} hidden)` : ''}
           </button>
         )}
         <span style={{ flex: 1 }} />
@@ -1149,6 +1157,20 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
             </table>
           )}
           <div style={{ fontSize: 11, color: '#718096', marginTop: 6 }}>Counts each room occupying that night (arrival ≤ night &lt; departure). Yellow = at cap, red = over.</div>
+        </div>
+      )}
+
+      {showCols && onToggleCol && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f' }}>Columns:</span>
+          {allCols.map(c => (
+            <label key={c.key} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onToggleCol(c.key)} />
+              {c.label}
+            </label>
+          ))}
+          <span style={{ fontSize: 11, color: '#718096' }}>(unchecked = hidden on this tab)</span>
         </div>
       )}
 
@@ -1642,9 +1664,13 @@ export default function MainPage() {
     setTabs(prev => ids.map(id => prev.find(t => t.id === id)).filter(Boolean));
     try { await api.post('/tabs/reorder', { ids }); } catch { /* keep optimistic order */ }
   };
-  const handleReorderCols = async (id, order) => {
-    setTabs(prev => prev.map(t => t.id === id ? { ...t, col_order: order } : t));
-    try { await api.put(`/tabs/${id}/columns`, { order }); } catch { /* keep optimistic order */ }
+  const handleSetCols = async (id, patch) => { // patch: { order?, hidden? }
+    setTabs(prev => prev.map(t => t.id === id ? {
+      ...t,
+      ...(patch.order !== undefined ? { col_order: patch.order } : {}),
+      ...(patch.hidden !== undefined ? { col_hidden: patch.hidden } : {}),
+    } : t));
+    try { await api.put(`/tabs/${id}/columns`, patch); } catch { /* keep optimistic */ }
   };
 
   const handleLogout = async () => {
@@ -1740,7 +1766,12 @@ export default function MainPage() {
               setRows={setActiveExhibits}
               tabId={activeTabId}
               cols={applyColOrder(TABLE_COLS[activeTab.type], activeTab.col_order)}
-              onReorderCols={order => handleReorderCols(activeTab.id, order)}
+              hidden={activeTab.col_hidden || []}
+              onReorderCols={order => handleSetCols(activeTab.id, { order })}
+              onToggleCol={key => {
+                const h = activeTab.col_hidden || [];
+                handleSetCols(activeTab.id, { hidden: h.includes(key) ? h.filter(k => k !== key) : [...h, key] });
+              }}
               noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'rooming' ? 'guest' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
