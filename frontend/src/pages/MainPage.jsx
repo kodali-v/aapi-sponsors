@@ -788,6 +788,7 @@ export const ROOMING_COLS = [
   { key: 'package', label: 'Package', w: 100, aliases: ['package', 'pkg'] },
   { key: 'paidon', label: 'Paid on', w: 90, aliases: ['paidon', 'paid'] },
   { key: 'hotel', label: 'HOTEL', w: 90, options: HOTEL_OPTS, aliases: ['hotel'] },
+  { key: 'upgrade', label: 'Upgrade', w: 110, options: ['TM-WBK', 'TM-WBQ', 'TM-KS', 'TM-LS', 'JWM-SpaK', 'JWM-PVK', 'JWM-PVQ'], aliases: ['upgrade', 'roomtype', 'room'] },
   { key: 'revhotel', label: 'Revised Hotel', w: 110, options: HOTEL_OPTS, aliases: ['revisedhotel', 'revhotel'] },
   { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'fname'] },
   { key: 'last', label: 'Last Name', w: 110, aliases: ['lastname', 'lname'] },
