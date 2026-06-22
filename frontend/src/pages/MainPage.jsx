@@ -799,6 +799,7 @@ export const ROOMING_COLS = [
   { key: 'hotel', label: 'HOTEL', w: 90, options: HOTEL_OPTS, aliases: ['hotel'] },
   { key: 'upgrade', label: 'Upgrade', w: 110, options: ['TM-WBK', 'TM-WBQ', 'TM-KS', 'TM-LS', 'JWM-SpaK', 'JWM-PVK', 'JWM-PVQ'], aliases: ['upgrade', 'roomtype', 'room'] },
   { key: 'revhotel', label: 'Revised Hotel', w: 110, options: HOTEL_OPTS, aliases: ['revisedhotel', 'revhotel'] },
+  { key: 'vjnotes', label: 'VJ Notes', w: 160, aliases: ['vjnotes', 'vjnote'] },
   { key: 'first', label: 'First Name', w: 110, aliases: ['firstname', 'fname'] },
   { key: 'last', label: 'Last Name', w: 110, aliases: ['lastname', 'lname'] },
   { key: 'name', label: 'Name', w: 160, aliases: ['name'] },
@@ -811,6 +812,14 @@ export const ROOMING_COLS = [
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS };
 export { TABLE_COLS };
 const isTableType = t => ['exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming'].includes(t);
+// Reorder a column set by a saved key order; unknown keys ignored, new keys appended at the end
+const applyColOrder = (base, order) => {
+  if (!Array.isArray(order) || !order.length) return base;
+  const byKey = Object.fromEntries(base.map(c => [c.key, c]));
+  const ordered = order.map(k => byKey[k]).filter(Boolean);
+  const rest = base.filter(c => !order.includes(c.key));
+  return [...ordered, ...rest];
+};
 const isSouvenirFamily = t => ['souvenir', 'toc', 'vipads'].includes(t);
 const normHeader = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -827,8 +836,18 @@ function mapExcelRow(raw, cols) {
   return out;
 }
 
-export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token, trackChanges = false }) {
+export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'table', onSync, apiBase = '/exhibits', strikeDelete = false, token, trackChanges = false, onReorderCols }) {
   const cfg = token ? { headers: { 'x-tab-token': token } } : undefined;
+  const [dragColKey, setDragColKey] = useState(null);
+  const [overColKey, setOverColKey] = useState(null);
+  const dropCol = (targetKey) => {
+    if (!dragColKey || dragColKey === targetKey) { setDragColKey(null); setOverColKey(null); return; }
+    const keys = cols.map(c => c.key);
+    const from = keys.indexOf(dragColKey), to = keys.indexOf(targetKey);
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    setDragColKey(null); setOverColKey(null);
+    if (onReorderCols) onReorderCols(keys);
+  };
   const changedCount = trackChanges ? rows.filter(r => r.orig && cols.some(c => String(r.data?.[c.key] ?? '') !== String(r.orig?.[c.key] ?? ''))).length : 0;
   const resetHighlights = async () => {
     if (!window.confirm('Clear all change highlights and set the CURRENT values as the new baseline?')) return;
@@ -1141,9 +1160,22 @@ export function TableTab({ rows, setRows, tabId, cols, noun = 'row', title = 'ta
             {cols.map(c => {
               const si = sortKeys.findIndex(s => s.key === c.key);
               return (
-              <th key={c.key} onClick={e => toggleSort(c.key, e.shiftKey)} title="Click to sort · Shift+click to add a second level"
-                style={{ minWidth: c.w, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
-                {c.label}{si >= 0 ? (sortKeys[si].dir === 1 ? ' ▲' : ' ▼') + (sortKeys.length > 1 ? ` ${si + 1}` : '') : ''}
+              <th key={c.key}
+                onDragOver={e => { if (dragColKey) { e.preventDefault(); if (overColKey !== c.key) setOverColKey(c.key); } }}
+                onDrop={() => dropCol(c.key)}
+                style={{ minWidth: c.w, whiteSpace: 'nowrap', userSelect: 'none', opacity: dragColKey === c.key ? 0.4 : 1, outline: overColKey === c.key ? '2px dashed rgba(255,255,255,0.7)' : 'none', outlineOffset: -2 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {onReorderCols && (
+                    <span draggable
+                      onDragStart={() => setDragColKey(c.key)}
+                      onDragEnd={() => { setDragColKey(null); setOverColKey(null); }}
+                      title="Drag to move column"
+                      style={{ cursor: 'grab', opacity: 0.5, fontSize: 11, letterSpacing: -2 }}>⋮⋮</span>
+                  )}
+                  <span onClick={e => toggleSort(c.key, e.shiftKey)} title="Click to sort · Shift+click to add a second level" style={{ cursor: 'pointer' }}>
+                    {c.label}{si >= 0 ? (sortKeys[si].dir === 1 ? ' ▲' : ' ▼') + (sortKeys.length > 1 ? ` ${si + 1}` : '') : ''}
+                  </span>
+                </span>
               </th>
               );
             })}
@@ -1610,6 +1642,10 @@ export default function MainPage() {
     setTabs(prev => ids.map(id => prev.find(t => t.id === id)).filter(Boolean));
     try { await api.post('/tabs/reorder', { ids }); } catch { /* keep optimistic order */ }
   };
+  const handleReorderCols = async (id, order) => {
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, col_order: order } : t));
+    try { await api.put(`/tabs/${id}/columns`, { order }); } catch { /* keep optimistic order */ }
+  };
 
   const handleLogout = async () => {
     await api.post('/auth/logout');
@@ -1703,7 +1739,8 @@ export default function MainPage() {
               rows={exhibitsByTab[activeTabId]}
               setRows={setActiveExhibits}
               tabId={activeTabId}
-              cols={TABLE_COLS[activeTab.type]}
+              cols={applyColOrder(TABLE_COLS[activeTab.type], activeTab.col_order)}
+              onReorderCols={order => handleReorderCols(activeTab.id, order)}
               noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'rooming' ? 'guest' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}

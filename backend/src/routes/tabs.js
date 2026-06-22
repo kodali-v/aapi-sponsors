@@ -128,6 +128,14 @@ router.delete('/:id/permanent', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Save per-tab column order (array of column keys) — must be before /:id
+router.put('/:id/columns', auth, async (req, res) => {
+  const { order } = req.body;
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+  await pool.query('UPDATE tabs SET col_order=$1 WHERE id=$2', [JSON.stringify(order), req.params.id]);
+  res.json({ ok: true });
+});
+
 // Rename tab
 router.put('/:id', auth, async (req, res) => {
   const { name } = req.body;
