@@ -864,13 +864,16 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
   const [sortKeys, setSortKeys] = useState([]); // [{key,dir}] — multi-level sort
   const sortActive = sortKeys.length > 0;
   const [showCounts, setShowCounts] = useState(false);
-  const [countCol, setCountCol] = useState((cols.find(c => c.options) || cols[0] || {}).key);
-  const counts = (() => {
-    if (!countCol) return [];
+  const [countKeys, setCountKeys] = useState(() => {
+    const pref = ['package', 'hotel', 'upgrade'].filter(k => cols.some(c => c.key === k));
+    return pref.length ? pref : [(cols.find(c => c.options) || cols[0] || {}).key].filter(Boolean);
+  });
+  const toggleCountKey = k => setCountKeys(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
+  const countsFor = key => {
     const m = new Map();
-    rows.forEach(r => { const v = String(r.data?.[countCol] ?? '').trim() || '(blank)'; m.set(v, (m.get(v) || 0) + 1); });
+    rows.forEach(r => { const v = String(r.data?.[key] ?? '').trim() || '(blank)'; m.set(v, (m.get(v) || 0) + 1); });
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  })();
+  };
   const hasCapacity = ['upgrade', 'arr', 'dep'].every(k => allCols.some(c => c.key === k));
   const [showCapacity, setShowCapacity] = useState(false);
   const capacity = (() => {
@@ -1108,20 +1111,29 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
       </div>
 
       {showCounts && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 16,
-          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f' }}>Count by</span>
-          <select value={countCol} onChange={e => setCountCol(e.target.value)}
-            style={{ padding: '5px 8px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }}>
-            {cols.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
-          <span style={{ color: '#cbd5e0' }}>|</span>
-          {counts.map(([v, n]) => (
-            <span key={v} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 20, padding: '3px 10px', fontSize: 13 }}>
-              <b>{v}</b> <span style={{ color: '#1e3a5f', fontWeight: 700 }}>{n}</span>
-            </span>
-          ))}
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: '#718096' }}>total {rows.length}</span>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: countKeys.length ? 8 : 0 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f', marginRight: 4 }}>Count by:</span>
+            {cols.map(c => (
+              <button key={c.key} className={`btn btn-sm ${countKeys.includes(c.key) ? 'btn-navy' : 'btn-ghost'}`}
+                style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => toggleCountKey(c.key)}>{c.label}</button>
+            ))}
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#718096' }}>total {rows.length}</span>
+          </div>
+          {countKeys.map(k => {
+            const col = cols.find(c => c.key === k);
+            if (!col) return null;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '5px 0', borderTop: '1px solid #eef2f7' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#1e3a5f', minWidth: 120 }}>{col.label}</span>
+                {countsFor(k).map(([v, n]) => (
+                  <span key={v} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 20, padding: '3px 10px', fontSize: 13 }}>
+                    <b>{v}</b> <span style={{ color: '#1e3a5f', fontWeight: 700 }}>{n}</span>
+                  </span>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
