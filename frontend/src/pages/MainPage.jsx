@@ -812,16 +812,23 @@ export const ROOMING_COLS = [
   { key: 'remarks', label: 'Remarks', w: 160, aliases: ['remarks', 'notes', 'comments'] },
 ];
 export const ATTENDEE_COLS = [
+  { key: 'sno', label: 'Sno', w: 50, int: true, aliases: ['sno', 'sl', 'slno', 'serial'] },
+  { key: 'groupid', label: 'Group ID', w: 95, int: true, aliases: ['groupid'] },
   { key: 'regid', label: 'Reg ID', w: 95, int: true, aliases: ['regid', 'registrationid'] },
   { key: 'package', label: 'Package', w: 110, aliases: ['package', 'pkg'] },
   { key: 'name', label: 'Name', w: 160, aliases: ['name'] },
-  { key: 'guestname', label: 'Guest Name', w: 150, aliases: ['guestname', 'additionalguestnames', 'guest', 'guestnames'] },
-  { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
-  { key: 'paid', label: 'Paid', w: 90, money: true, aliases: ['paid', 'amountpaid', 'amount'] },
+  { key: 'guest1id', label: 'Guest 1 ID', w: 95, int: true, aliases: ['guest1id', 'g1id', 'guestid'] },
+  { key: 'guest1name', label: 'Guest 1 Name', w: 150, aliases: ['guest1name', 'g1name', 'guestname'] },
+  { key: 'guest2name', label: 'Guest 2 Name', w: 150, aliases: ['guest2name', 'g2name'] },
+  { key: 'guest3name', label: 'Guest 3 Name', w: 150, aliases: ['guest3name', 'g3name'] },
+  { key: 'paid', label: 'Paid', w: 90, money: true, aliases: ['paid', 'amountpaid'] },
   { key: 'paidon', label: 'Paid on', w: 90, aliases: ['paidon', 'paymentdate', 'datepaid'] },
+  { key: 'baldue', label: 'Bal Due', w: 90, money: true, aliases: ['baldue', 'balancedue', 'balance', 'due'] },
   { key: 'specialty', label: 'Specialty', w: 150, aliases: ['specialty', 'speciality'] },
   { key: 'city', label: 'City', w: 120, aliases: ['city'] },
   { key: 'state', label: 'State', w: 70, aliases: ['state'] },
+  { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
+  { key: 'cell', label: 'Cell', w: 120, aliases: ['cell', 'cellphone', 'phone', 'mobile', 'phonenumber'] },
 ];
 const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS, attendees: ATTENDEE_COLS };
 export { TABLE_COLS };
