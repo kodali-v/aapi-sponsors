@@ -792,8 +792,8 @@ export const VIPADS_COLS = [
 ];
 const HOTEL_OPTS = ['TM', 'JWM', 'TMU'];
 export const ROOMING_COLS = [
-  { key: 'regid', label: 'Reg ID', w: 95, aliases: ['regid'] },
-  { key: 'groupid', label: 'Group ID', w: 95, aliases: ['groupid'] },
+  { key: 'regid', label: 'Reg ID', w: 95, int: true, aliases: ['regid'] },
+  { key: 'groupid', label: 'Group ID', w: 95, int: true, aliases: ['groupid'] },
   { key: 'package', label: 'Package', w: 100, aliases: ['package', 'pkg'] },
   { key: 'paidon', label: 'Paid on', w: 90, aliases: ['paidon', 'paid'] },
   { key: 'hotel', label: 'HOTEL', w: 90, options: HOTEL_OPTS, aliases: ['hotel'] },
@@ -812,7 +812,7 @@ export const ROOMING_COLS = [
   { key: 'remarks', label: 'Remarks', w: 160, aliases: ['remarks', 'notes', 'comments'] },
 ];
 export const ATTENDEE_COLS = [
-  { key: 'regid', label: 'Reg ID', w: 95, aliases: ['regid', 'registrationid'] },
+  { key: 'regid', label: 'Reg ID', w: 95, int: true, aliases: ['regid', 'registrationid'] },
   { key: 'package', label: 'Package', w: 110, aliases: ['package', 'pkg'] },
   { key: 'name', label: 'Name', w: 160, aliases: ['name'] },
   { key: 'guestname', label: 'Guest Name', w: 150, aliases: ['guestname', 'additionalguestnames', 'guest', 'guestnames'] },
@@ -846,6 +846,10 @@ function mapExcelRow(raw, cols) {
     let found = entries.find(([h]) => aliases.includes(normHeader(h)));
     if (!found) found = entries.find(([h]) => aliases.some(a => normHeader(h).includes(a)));
     out[col.key] = found ? String(found[1] ?? '').trim() : '';
+    if (col.int && out[col.key]) {
+      const n = Number(out[col.key].replace(/[^0-9.-]/g, ''));
+      if (!Number.isNaN(n)) out[col.key] = String(Math.trunc(n)); // drop any .00
+    }
   }
   return out;
 }
@@ -963,6 +967,9 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
         if (c.money) {
           const n = Number(String(raw).replace(/[^0-9.-]/g, ''));
           o[c.label] = (raw === '' || Number.isNaN(n)) ? '' : n; // real number; non-numeric -> blank
+        } else if (c.int) {
+          const n = Number(String(raw).replace(/[^0-9.-]/g, ''));
+          o[c.label] = (raw === '' || Number.isNaN(n)) ? raw : Math.trunc(n); // whole number
         } else {
           o[c.label] = raw;
         }
@@ -981,6 +988,7 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
         const cell = ws[XLSX.utils.encode_cell({ r: ri + 1, c: ci })];
         if (!cell) return;
         if (c.money && cell.t === 'n') cell.z = '$#,##0.00';
+        if (c.int && cell.t === 'n') cell.z = '0';
         const mark = r.marks?.[c.key];
         const changed = trackChanges && r.orig && String(r.data?.[c.key] ?? '') !== String(r.orig?.[c.key] ?? '');
         const rgb = mark === 'red' ? 'FECACA' : (mark === 'yellow' || changed) ? 'FDE68A' : null;
@@ -1269,7 +1277,7 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
                       </select>
                     );
                   })() : (
-                    <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} onSave={v => saveCell(row.id, c.key, v)} />
+                    <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} int={c.int} onSave={v => saveCell(row.id, c.key, v)} />
                   )}
                 </td>
                 );
@@ -1295,9 +1303,25 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
 }
 
 // One editable exhibit cell (keeps local state so background refresh won't clobber typing)
-function ExhibitCell({ value, onSave, money }) {
+function ExhibitCell({ value, onSave, money, int }) {
   const [val, setVal] = useState(value ?? '');
   const [editing, setEditing] = useState(false);
+
+  if (int) {
+    const commit = () => {
+      let v = val;
+      const n = Number(String(val).replace(/[^0-9.-]/g, ''));
+      if (val !== '' && !Number.isNaN(n)) v = String(Math.trunc(n)); // drop decimals
+      if (v !== val) setVal(v);
+      if (v !== (value ?? '')) onSave(v);
+    };
+    return (
+      <input className="note-input" inputMode="numeric"
+        style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
+        value={val} placeholder="—"
+        onChange={e => setVal(e.target.value)} onBlur={commit} />
+    );
+  }
   // Auto-size to content (in chars) so columns fit their values
   const size = Math.min(48, Math.max(8, String(val ?? '').length + 1));
   const inputStyle = { width: 'auto', padding: '4px 6px', background: 'transparent' };
