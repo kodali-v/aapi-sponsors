@@ -23,7 +23,7 @@ function verifyPasscode(pc, stored) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-const VALID_TYPES = ['schedule', 'deliverables', 'exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming'];
+const VALID_TYPES = ['schedule', 'deliverables', 'exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming', 'attendees'];
 
 // item_count per tab: days (schedule), columns (deliverables), or rows (exhibits/sponsorlist)
 const COUNT_SELECT = `

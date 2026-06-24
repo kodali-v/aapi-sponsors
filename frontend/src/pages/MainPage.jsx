@@ -811,9 +811,21 @@ export const ROOMING_COLS = [
   { key: 'addl', label: 'Additional Guest Names', w: 180, aliases: ['additionalguestnames', 'additionalguests', 'guestname', 'guestnames'] },
   { key: 'remarks', label: 'Remarks', w: 160, aliases: ['remarks', 'notes', 'comments'] },
 ];
-const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS };
+export const ATTENDEE_COLS = [
+  { key: 'regid', label: 'Reg ID', w: 95, aliases: ['regid', 'registrationid'] },
+  { key: 'package', label: 'Package', w: 110, aliases: ['package', 'pkg'] },
+  { key: 'name', label: 'Name', w: 160, aliases: ['name'] },
+  { key: 'guestname', label: 'Guest Name', w: 150, aliases: ['guestname', 'additionalguestnames', 'guest', 'guestnames'] },
+  { key: 'email', label: 'Email', w: 180, aliases: ['email', 'emailaddress', 'mail'] },
+  { key: 'paid', label: 'Paid', w: 90, money: true, aliases: ['paid', 'amountpaid', 'amount'] },
+  { key: 'paidon', label: 'Paid on', w: 90, aliases: ['paidon', 'paymentdate', 'datepaid'] },
+  { key: 'specialty', label: 'Specialty', w: 150, aliases: ['specialty', 'speciality'] },
+  { key: 'city', label: 'City', w: 120, aliases: ['city'] },
+  { key: 'state', label: 'State', w: 70, aliases: ['state'] },
+];
+const TABLE_COLS = { exhibits: EXHIBIT_COLS, sponsorlist: SPONSOR_COLS, souvenir: SOUVENIR_COLS, toc: TOC_COLS, vipads: VIPADS_COLS, rooming: ROOMING_COLS, attendees: ATTENDEE_COLS };
 export { TABLE_COLS };
-const isTableType = t => ['exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming'].includes(t);
+const isTableType = t => ['exhibits', 'sponsorlist', 'souvenir', 'toc', 'vipads', 'rooming', 'attendees'].includes(t);
 // Reorder a column set by a saved key order; unknown keys ignored, new keys appended at the end
 const applyColOrder = (base, order) => {
   if (!Array.isArray(order) || !order.length) return base;
@@ -1314,7 +1326,7 @@ function ExhibitCell({ value, onSave, money }) {
 }
 
 // ── Tab Bar (add / rename / delete / reorder tabs) ────────
-const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : t.type === 'rooming' ? '🏨' : '📅';
+const TAB_ICON = t => t.type === 'deliverables' ? '📋' : t.type === 'exhibits' ? '🏢' : t.type === 'sponsorlist' ? '🤝' : t.type === 'souvenir' ? '🎁' : t.type === 'toc' ? '📑' : t.type === 'vipads' ? '⭐' : t.type === 'rooming' ? '🏨' : t.type === 'attendees' ? '👥' : '📅';
 const TAB_UNIT = t => t.type === 'schedule' ? 'day' : t.type === 'deliverables' ? 'column' : 'row';
 
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReorder, onLock, trash = [], onRestore, onPurge }) {
@@ -1407,6 +1419,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onReor
             <option value="toc">📑 TOC table</option>
             <option value="vipads">⭐ VIP Ads table</option>
             <option value="rooming">🏨 Hotel Rooming List</option>
+            <option value="attendees">👥 Attendees table</option>
           </select>
           <button className="btn btn-navy btn-sm" onClick={submitAdd}>Add</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -1785,7 +1798,7 @@ export default function MainPage() {
                 const h = activeTab.col_hidden || [];
                 handleSetCols(activeTab.id, { hidden: h.includes(key) ? h.filter(k => k !== key) : [...h, key] });
               }}
-              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'rooming' ? 'guest' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
+              noun={activeTab.type === 'sponsorlist' ? 'sponsor' : activeTab.type === 'rooming' ? 'guest' : activeTab.type === 'attendees' ? 'attendee' : isSouvenirFamily(activeTab.type) ? 'row' : 'exhibitor'}
               title={activeTab.name}
               onSync={activeTab.type === 'sponsorlist' ? handleSyncSponsors : null}
               strikeDelete={isSouvenirFamily(activeTab.type)}
