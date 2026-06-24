@@ -1053,9 +1053,16 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
+    let wb;
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
+      wb = XLSX.read(buf, { type: 'array' });
+    } catch (err) {
+      console.error('Parse failed:', err);
+      alert('Could not read that file (' + (err?.message || err) + ').\nUpload a .xlsx or .csv with headers in the first row. If it is still open in Excel, close it first.');
+      setImporting(false); e.target.value = ''; return;
+    }
+    try {
       // Pick the sheet: auto-match by tab name, else ask which one
       let sheetName = wb.SheetNames[0];
       if (wb.SheetNames.length > 1) {
@@ -1090,7 +1097,9 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
       setRows(prev => replace ? res.data : [...prev, ...res.data]);
       alert(`${replace ? 'Replaced with' : 'Imported'} ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
     } catch (err) {
-      alert('Could not read that file. Please upload a .xlsx or .csv with column headers in the first row.');
+      console.error('Import failed:', err);
+      const server = err?.response?.data?.error;
+      alert('Import failed: ' + (server || err?.message || err) + (err?.response?.status ? ` (HTTP ${err.response.status})` : ''));
     } finally {
       setImporting(false);
       e.target.value = '';
