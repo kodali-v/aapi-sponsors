@@ -1285,23 +1285,9 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
                 <td key={c.key} style={{ padding: 2, background: bg }}
                   onContextMenu={e => { e.preventDefault(); cycleMark(row.id, c.key); }}
                   title={changed && !mark ? `Changed from: ${row.orig?.[c.key] || '(blank)'}` : 'Right-click to highlight (yellow → red → none)'}>
-                  {(c.options || c.status) ? (() => {
-                    const opts = c.options || ['Confirmed', 'Pending'];
-                    const cur = row.data?.[c.key] || '';
-                    const list = cur && !opts.includes(cur) ? [cur, ...opts] : opts; // keep unrecognized imported values
-                    const sc = STATUS_COLORS[String(cur).toUpperCase()];
-                    return (
-                      <select className="note-input"
-                        style={{ width: '100%', padding: '4px 6px', borderRadius: 4,
-                          background: changed ? 'transparent' : (sc ? sc.bg : 'transparent'), color: sc ? sc.color : 'inherit', fontWeight: (sc || changed) ? 700 : 400 }}
-                        value={cur} onChange={e => saveCell(row.id, c.key, e.target.value)}>
-                        <option value="">—</option>
-                        {list.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    );
-                  })() : (
-                    <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} int={c.int} onSave={v => saveCell(row.id, c.key, v)} />
-                  )}
+                  {(c.options || c.status)
+                    ? <OptionCell value={row.data?.[c.key] || ''} options={c.options || ['Confirmed', 'Pending']} onSave={v => saveCell(row.id, c.key, v)} />
+                    : <ExhibitCell value={row.data?.[c.key] || ''} money={c.money} int={c.int} onSave={v => saveCell(row.id, c.key, v)} />}
                 </td>
                 );
               })}
@@ -1325,50 +1311,60 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
   );
 }
 
-// One editable exhibit cell (keeps local state so background refresh won't clobber typing)
+// A cell that shows plain text by default and only becomes an <input> when clicked.
+// (Keeps the DOM light so large tables stay responsive.)
 function ExhibitCell({ value, onSave, money, int }) {
-  const [val, setVal] = useState(value ?? '');
   const [editing, setEditing] = useState(false);
-
-  if (int) {
-    const commit = () => {
-      let v = val;
-      const n = Number(String(val).replace(/[^0-9.-]/g, ''));
-      if (val !== '' && !Number.isNaN(n)) v = String(Math.trunc(n)); // drop decimals
-      if (v !== val) setVal(v);
-      if (v !== (value ?? '')) onSave(v);
-    };
+  const [val, setVal] = useState('');
+  const start = () => { setVal(value ?? ''); setEditing(true); };
+  const commit = () => {
+    let v = val;
+    if (int && val !== '') { const n = Number(String(val).replace(/[^0-9.-]/g, '')); if (!Number.isNaN(n)) v = String(Math.trunc(n)); }
+    setEditing(false);
+    if (v !== (value ?? '')) onSave(v);
+  };
+  if (!editing) {
+    const empty = value === '' || value == null;
+    const display = empty ? '—' : (money ? formatCurrency(value) : value);
     return (
-      <input className="note-input" inputMode="numeric"
-        style={{ width: '100%', padding: '4px 6px', background: 'transparent' }}
-        value={val} placeholder="—"
-        onChange={e => setVal(e.target.value)} onBlur={commit} />
-    );
-  }
-  // Auto-size to content (in chars) so columns fit their values
-  const size = Math.min(48, Math.max(8, String(val ?? '').length + 1));
-  const inputStyle = { width: 'auto', padding: '4px 6px', background: 'transparent' };
-
-  if (money) {
-    const commit = () => { setEditing(false); if (val !== (value ?? '')) onSave(val); };
-    return editing ? (
-      <input className="note-input" autoFocus inputMode="decimal" size={size}
-        style={{ ...inputStyle, textAlign: 'right' }}
-        value={val} placeholder="$"
-        onChange={e => setVal(e.target.value)} onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(value ?? ''); setEditing(false); } }} />
-    ) : (
-      <div onClick={() => setEditing(true)}
-        style={{ cursor: 'text', minHeight: 26, padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap', color: val === '' ? '#a0aec0' : '#1a202c' }}>
-        {val === '' ? '—' : formatCurrency(val)}
+      <div onClick={start}
+        style={{ cursor: 'text', minHeight: 26, padding: '4px 6px', whiteSpace: 'nowrap', textAlign: (money || int) ? 'right' : 'left', color: empty ? '#a0aec0' : '#1a202c' }}>
+        {display}
       </div>
     );
   }
   return (
-    <input className="note-input" size={size} style={inputStyle}
+    <input className="note-input" autoFocus inputMode={(money || int) ? 'decimal' : undefined}
+      style={{ width: '100%', padding: '4px 6px', background: 'transparent', textAlign: (money || int) ? 'right' : 'left' }}
       value={val} placeholder="—"
-      onChange={e => setVal(e.target.value)}
-      onBlur={() => { if (val !== (value ?? '')) onSave(val); }} />
+      onChange={e => setVal(e.target.value)} onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }} />
+  );
+}
+
+// Dropdown cell: shows the value as text, becomes a <select> only when clicked.
+function OptionCell({ value, options, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const cur = value || '';
+  const sc = STATUS_COLORS[String(cur).toUpperCase()];
+  if (!editing) {
+    return (
+      <div onClick={() => setEditing(true)}
+        style={{ cursor: 'pointer', minHeight: 26, padding: '4px 6px', borderRadius: 4, whiteSpace: 'nowrap',
+          background: sc ? sc.bg : undefined, color: sc ? sc.color : (cur ? '#1a202c' : '#a0aec0'), fontWeight: sc ? 700 : 400 }}>
+        {cur || '—'}
+      </div>
+    );
+  }
+  const list = cur && !options.includes(cur) ? [cur, ...options] : options;
+  return (
+    <select className="note-input" autoFocus style={{ width: '100%', padding: '4px 6px' }}
+      value={cur}
+      onChange={e => { onSave(e.target.value); setEditing(false); }}
+      onBlur={() => setEditing(false)}>
+      <option value="">—</option>
+      {list.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
   );
 }
 
