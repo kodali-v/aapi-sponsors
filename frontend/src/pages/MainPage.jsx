@@ -1093,9 +1093,16 @@ export function TableTab({ rows, setRows, tabId, cols: allCols, noun = 'row', ti
           `Cancel = ADD the imported rows to the existing ones`
         );
       }
-      const res = await api.post(`${apiBase}/bulk`, { tab_id: tabId, rows: mapped, replace }, cfg);
-      setRows(prev => replace ? res.data : [...prev, ...res.data]);
-      alert(`${replace ? 'Replaced with' : 'Imported'} ${res.data.length} row${res.data.length === 1 ? '' : 's'}.`);
+      // Upload in chunks so each request stays small (avoids body-size limits on large files)
+      const CHUNK = 200;
+      let inserted = [];
+      for (let i = 0; i < mapped.length; i += CHUNK) {
+        const batch = mapped.slice(i, i + CHUNK);
+        const res = await api.post(`${apiBase}/bulk`, { tab_id: tabId, rows: batch, replace: replace && i === 0 }, cfg);
+        inserted = inserted.concat(res.data);
+      }
+      setRows(prev => replace ? inserted : [...prev, ...inserted]);
+      alert(`${replace ? 'Replaced with' : 'Imported'} ${inserted.length} row${inserted.length === 1 ? '' : 's'}.`);
     } catch (err) {
       console.error('Import failed:', err);
       const server = err?.response?.data?.error;
