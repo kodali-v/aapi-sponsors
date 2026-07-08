@@ -79,6 +79,37 @@ router.post('/sync', auth, async (req, res) => {
   res.json({ added, updated, sponsors: all.rows });
 });
 
+// Sync the pool FROM the Sponsors master table(s) (type 'sponsorlist'): the single source of company names
+router.post('/sync-from-master', auth, async (req, res) => {
+  const rows = await pool.query(
+    `SELECT er.data FROM exhibit_rows er JOIN tabs t ON t.id = er.tab_id
+     WHERE t.type='sponsorlist' AND t.deleted_at IS NULL ORDER BY er.sort_order, er.created_at`
+  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let max = (await client.query('SELECT COALESCE(MAX(sort_order),0) as m FROM sponsors')).rows[0].m;
+    const seen = new Set();
+    for (const row of rows.rows) {
+      const name = String(row.data?.company || '').trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      const status = String(row.data?.status || '').toLowerCase() === 'confirmed' ? 'confirmed' : 'probable';
+      const ex = await client.query('SELECT id FROM sponsors WHERE LOWER(name)=LOWER($1) LIMIT 1', [name]);
+      if (ex.rows.length) await client.query('UPDATE sponsors SET status=$1 WHERE id=$2', [status, ex.rows[0].id]);
+      else { max++; await client.query('INSERT INTO sponsors (name, status, sort_order) VALUES ($1,$2,$3)', [name, status, max]); }
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'sync failed' });
+  } finally {
+    client.release();
+  }
+  const all = await pool.query('SELECT * FROM sponsors ORDER BY sort_order, created_at');
+  res.json(all.rows);
+});
+
 // Reorder sponsors
 router.post('/reorder', auth, async (req, res) => {
   const { ids } = req.body;

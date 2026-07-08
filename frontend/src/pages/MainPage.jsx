@@ -93,9 +93,40 @@ function SponsorChip({ sponsor, onDelete, onStatusChange, onDragStart }) {
   );
 }
 
-// ── Schedule Tab ──────────────────────────────────────────
-function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onDeleteSponsor, onStatusChange }) {
-  const [dragSponsorId, setDragSponsorId] = useState(null);
+// Searchable company picker (options come from the Sponsors master via the pool)
+function CompanySelect({ sponsors, exclude = [], onPick }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const list = sponsors
+    .filter(s => !exclude.includes(s.id) && s.name.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 60);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input className="form-input" placeholder="+ add company…" value={q}
+        onChange={e => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        style={{ width: '100%', fontSize: 12, padding: '4px 6px' }} />
+      {open && list.length > 0 && (
+        <div style={{ position: 'absolute', zIndex: 40, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.14)', maxHeight: 220, overflowY: 'auto', width: '100%', marginTop: 2 }}>
+          {list.map(s => (
+            <div key={s.id} onMouseDown={() => { onPick(s.id); setQ(''); setOpen(false); }}
+              style={{ padding: '6px 8px', fontSize: 12, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8 }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+              onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+              <span>{s.name}</span>
+              {s.status === 'probable' && <span style={{ color: '#d97706', fontSize: 10 }}>probable</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Schedule Tab (Product Theatre) ────────────────────────
+function ScheduleTab({ sponsors, schedule, setSchedule, tabId }) {
   const [dragDayId, setDragDayId] = useState(null);
   const [overDayId, setOverDayId] = useState(null);
   const [addingSlot, setAddingSlot] = useState(null); // dayId
@@ -105,22 +136,20 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
   const [newEnd, setNewEnd] = useState('');
   const [slotError, setSlotError] = useState('');
 
-  const handleDrop = async (slotId) => {
-    if (!dragSponsorId) return;
+  const handleAssign = async (slotId, sponsorId) => {
     try {
-      const r = await api.post(`/schedule/slots/${slotId}/assign`, { sponsor_id: dragSponsorId });
+      const r = await api.post(`/schedule/slots/${slotId}/assign`, { sponsor_id: sponsorId });
       setSchedule(prev => prev.map(day => ({
         ...day,
         slots: day.slots.map(slot =>
           slot.id === slotId
-            ? { ...slot, assignments: [...slot.assignments.filter(a => a.sponsor_id !== dragSponsorId), r.data] }
+            ? { ...slot, assignments: [...slot.assignments.filter(a => a.sponsor_id !== sponsorId), r.data] }
             : slot
         )
       })));
     } catch (err) {
       if (err.response?.status !== 409) alert('Failed to assign');
     }
-    setDragSponsorId(null);
   };
 
   const handleRemoveAssignment = async (slotId, sponsorId) => {
@@ -182,15 +211,6 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
 
   return (
     <div className="boardscroll" style={{ display: 'flex', gap: 20, padding: 24, alignItems: 'flex-start' }}>
-      {/* Sponsors sidebar */}
-      <SponsorsPanel
-        sponsors={sponsors}
-        onAdd={onAddSponsor}
-        onDelete={onDeleteSponsor}
-        onStatusChange={onStatusChange}
-        onDragStart={setDragSponsorId}
-      />
-
       {/* Day columns */}
       {schedule.map(day => (
         <div key={day.id} className="day-col" style={{ opacity: dragDayId === day.id ? 0.4 : 1, outline: overDayId === day.id ? '2px dashed #1e3a5f' : 'none', outlineOffset: 2 }}>
@@ -240,18 +260,15 @@ function ScheduleTab({ sponsors, schedule, setSchedule, tabId, onAddSponsor, onD
                 <button className="btn btn-danger btn-sm" style={{ padding: '1px 6px', fontSize: 11 }}
                   onClick={() => handleDeleteSlot(day.id, slot.id)}>✕</button>
               </div>
-              <div
-                className={`slot-drop${dragSponsorId ? ' drag-over' : ''}`}
-                onDragOver={e => e.preventDefault()}
-                onDrop={() => handleDrop(slot.id)}
-              >
-                {slot.assignments.length === 0 && <span>Drop sponsor here</span>}
+              <div className="slot-drop" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                 {slot.assignments.map(a => (
                   <div key={a.id} className={`assigned-chip${a.sponsor_status === 'probable' ? ' probable' : ''}`}>
                     {a.sponsor_name}
                     <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => handleRemoveAssignment(slot.id, a.sponsor_id)}>✕</span>
                   </div>
                 ))}
+                <CompanySelect sponsors={sponsors} exclude={slot.assignments.map(a => a.sponsor_id)}
+                  onPick={id => handleAssign(slot.id, id)} />
               </div>
             </div>
           ))}
@@ -1588,6 +1605,10 @@ export default function MainPage() {
     if (!activeTabId) return;
     const t = tabs.find(x => x.id === activeTabId);
     if (!t || tabBlocked(t)) return; // don't fetch locked-tab data until unlocked
+    // Product Theatre & Deliverables pull companies from the Sponsors master table
+    if (t.type === 'schedule' || t.type === 'deliverables') {
+      api.post('/sponsors/sync-from-master').then(r => setSponsors(r.data)).catch(() => {});
+    }
     if (t.type === 'schedule' && scheduleByTab[activeTabId] === undefined) {
       api.get(`/schedule?tab_id=${activeTabId}`)
         .then(r => setScheduleByTab(p => ({ ...p, [activeTabId]: r.data }))).catch(console.error);
