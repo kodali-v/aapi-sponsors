@@ -110,6 +110,30 @@ router.post('/sync-from-master', auth, async (req, res) => {
   res.json(all.rows);
 });
 
+// Company -> master fields (from the Sponsors master table) for linking into Deliverables
+router.get('/master-info', auth, async (req, res) => {
+  const rows = await pool.query(
+    `SELECT er.data FROM exhibit_rows er JOIN tabs t ON t.id = er.tab_id
+     WHERE t.type='sponsorlist' AND t.deleted_at IS NULL`
+  );
+  const map = {};
+  for (const r of rows.rows) {
+    const name = String(r.data?.company || '').trim();
+    if (!name) continue;
+    map[name.toLowerCase()] = {
+      company: name,
+      amount: r.data?.amount ?? '',
+      received: r.data?.received ?? '',
+      status: r.data?.status ?? '',
+      contact: r.data?.contact ?? '',
+      phone: r.data?.phone ?? '',
+      email: r.data?.email ?? '',
+      aapi: r.data?.aapi ?? '',
+    };
+  }
+  res.json(map);
+});
+
 // Reorder sponsors
 router.post('/reorder', auth, async (req, res) => {
   const { ids } = req.body;

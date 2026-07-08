@@ -447,7 +447,13 @@ function TypedCell({ type, value, onSave }) {
 }
 
 // ── Deliverables Tab ──────────────────────────────────────
-function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setMatrix, tabId }) {
+// Read-only columns in Deliverables that are linked from the Sponsors master table
+const DELIV_LINKED = [
+  { key: 'amount', label: 'Sponsorship Amt ($)' },
+  { key: 'received', label: 'Amount Received ($)' },
+  { key: 'pending', label: 'Balance ($)', computed: true },
+];
+function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setMatrix, tabId, masterInfo = {} }) {
   const [addingCol, setAddingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [newColType, setNewColType] = useState('checkbox');
@@ -648,6 +654,11 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
                 </div>
               </th>
             ))}
+            {DELIV_LINKED.map(l => (
+              <th key={l.key} style={{ minWidth: 120, whiteSpace: 'nowrap' }} title="Linked from the Sponsors master table (read-only)">
+                🔗 {l.label}
+              </th>
+            ))}
             {notesCol && <th key={notesCol.id} style={{ minWidth: 240 }}>{notesCol.name}</th>}
           </tr>
         </thead>
@@ -656,18 +667,8 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
             <tr key={sponsor.id}>
               <td className="company-cell">{sponsor.name}</td>
               <td><span className={`badge badge-${sponsor.status}`}>{sponsor.status}</span></td>
-              {orderedDeliverables.map(d => {
+              {cols.map(d => {
                 const cell = matrix[sponsor.id]?.[d.id] || { checked: false, notes: [], value: '' };
-                if (isNotesCol(d)) {
-                  return (
-                    <td key={d.id} style={{ verticalAlign: 'top' }}>
-                      <NotesCell
-                        value={cell.notes}
-                        onSave={content => handleSaveNotes(sponsor.id, d.id, content)}
-                      />
-                    </td>
-                  );
-                }
                 const colType = d.col_type || 'checkbox';
                 if (colType !== 'checkbox') {
                   return (
@@ -721,6 +722,24 @@ function DeliverablesTab({ sponsors, deliverables, setDeliverables, matrix, setM
                   </td>
                 );
               })}
+              {DELIV_LINKED.map(l => {
+                const mi = masterInfo[String(sponsor.name).toLowerCase()] || {};
+                const num = v => { const n = Number(String(v ?? '').replace(/[^0-9.-]/g, '')); return Number.isNaN(n) ? null : n; };
+                let val;
+                if (l.computed) { const a = num(mi.amount), r = num(mi.received); val = (a == null && r == null) ? null : (a || 0) - (r || 0); }
+                else val = num(mi[l.key]);
+                return (
+                  <td key={l.key} style={{ textAlign: 'right', whiteSpace: 'nowrap', color: '#475569' }}>
+                    {val == null ? '—' : formatCurrency(val)}
+                  </td>
+                );
+              })}
+              {notesCol && (
+                <td key={notesCol.id} style={{ verticalAlign: 'top' }}>
+                  <NotesCell value={(matrix[sponsor.id]?.[notesCol.id] || { notes: [] }).notes}
+                    onSave={content => handleSaveNotes(sponsor.id, notesCol.id, content)} />
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -1526,6 +1545,7 @@ export default function MainPage() {
   const [trash, setTrash] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
   const [tabTokens, setTabTokens] = useState({}); // tabId -> unlock token (locked tabs)
+  const [masterInfo, setMasterInfo] = useState({}); // company(lowercase) -> master sponsor fields
   const [sponsors, setSponsors] = useState([]);
   const [scheduleByTab, setScheduleByTab] = useState({}); // tabId -> days[]
   const [delivByTab, setDelivByTab] = useState({});       // tabId -> { deliverables, matrix }
@@ -1607,6 +1627,9 @@ export default function MainPage() {
     // Product Theatre & Deliverables pull companies from the Sponsors master table
     if (t.type === 'schedule' || t.type === 'deliverables') {
       api.post('/sponsors/sync-from-master').then(r => setSponsors(r.data)).catch(() => {});
+    }
+    if (t.type === 'deliverables') {
+      api.get('/sponsors/master-info').then(r => setMasterInfo(r.data)).catch(() => {});
     }
     if (t.type === 'schedule' && scheduleByTab[activeTabId] === undefined) {
       api.get(`/schedule?tab_id=${activeTabId}`)
@@ -1843,6 +1866,7 @@ export default function MainPage() {
               matrix={delivByTab[activeTabId].matrix}
               setMatrix={setActiveMatrix}
               tabId={activeTabId}
+              masterInfo={masterInfo}
             />
       )}
 
