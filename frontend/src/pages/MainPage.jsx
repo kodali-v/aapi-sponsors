@@ -112,11 +112,10 @@ function CompanySelect({ sponsors, exclude = [], onPick }) {
         <div style={{ position: 'absolute', zIndex: 40, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.14)', maxHeight: 220, overflowY: 'auto', width: '100%', marginTop: 2 }}>
           {list.map(s => (
             <div key={s.id} onMouseDown={() => { onPick(s.id); setQ(''); setOpen(false); }}
-              style={{ padding: '6px 8px', fontSize: 12, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8 }}
+              style={{ padding: '6px 8px', fontSize: 12, cursor: 'pointer' }}
               onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
               onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-              <span>{s.name}</span>
-              {s.status === 'probable' && <span style={{ color: '#d97706', fontSize: 10 }}>probable</span>}
+              {s.name}
             </div>
           ))}
         </div>
